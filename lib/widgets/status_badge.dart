@@ -113,7 +113,7 @@ class StatusBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (showIcon) ...[
+          if (showIcon && icon != null) ...[
             Icon(
               icon!,
               size: (fontSize ?? (compact ? 10 : 12)) + 2,

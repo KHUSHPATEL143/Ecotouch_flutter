@@ -34,6 +34,11 @@ class _AttendanceFullScreenState extends ConsumerState<AttendanceFullScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final selectedDate = ref.watch(selectedDateProvider);
+    // Watch the provider directly to get updates when rows are modified
+    final attendanceAsync = ref.watch(attendanceListProvider(selectedDate));
+    
+    // Fallback to passed list if loading/error, or use latest data
+    final currentAttendanceList = attendanceAsync.value ?? widget.attendanceList;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -58,7 +63,7 @@ class _AttendanceFullScreenState extends ConsumerState<AttendanceFullScreen> {
             padding: const EdgeInsets.only(right: 16.0),
             child: Center(
               child: Text(
-                'Total Workers: ${widget.workers.length} | Present: ${widget.attendanceList.length}',
+                'Total Workers: ${widget.workers.length} | Present: ${currentAttendanceList.where((a) => a.status != AttendanceStatus.absent).length}',
                 style: theme.textTheme.bodyMedium,
               ),
             ),
@@ -115,21 +120,21 @@ class _AttendanceFullScreenState extends ConsumerState<AttendanceFullScreen> {
                     separatorBuilder: (c, i) => Divider(height: 1, color: theme.dividerColor),
                     itemBuilder: (context, index) {
                       final worker = widget.workers[index];
-                      // Find attendance for this worker
-                      final attendance = widget.attendanceList.firstWhere(
+                      // Find attendance for this worker in the UPDATED list
+                      final attendance = currentAttendanceList.firstWhere(
                         (a) => a.workerId == worker.id,
                         orElse: () => Attendance(
                           workerId: worker.id!,
                           date: selectedDate,
-                          status: AttendanceStatus.fullDay, // Default for new, but won't be saved until marked
+                          status: AttendanceStatus.absent, // Default to Absent as per request
                           timeIn: '',
                         ),
                       );
 
-                      final isMarked = widget.attendanceList.any((a) => a.workerId == worker.id);
+                      final isMarked = currentAttendanceList.any((a) => a.workerId == worker.id);
 
                       return _AttendanceRow(
-                        key: ValueKey(worker.id),
+                        key: ValueKey('${worker.id}_${attendance.status}_${attendance.timeIn}'), // Force rebuild on change
                         worker: worker,
                         attendance: attendance,
                         isMarked: isMarked,
@@ -188,11 +193,18 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
   TimeOfDay? _timeOut;
   bool _isHovering = false;
   bool _isSaving = false;
+  bool _isEditing = false; // Add editing state
 
   @override
   void initState() {
     super.initState();
-    _status = widget.attendance.status;
+    _initializeState();
+    // If not marked, we are effectively 'editing' (entering new data)
+    _isEditing = !widget.isMarked; 
+  }
+  
+  void _initializeState() {
+     _status = widget.attendance.status;
     _timeIn = widget.attendance.timeIn != null && widget.attendance.timeIn!.isNotEmpty
         ? app_date_utils.DateUtils.parseTime(widget.attendance.timeIn!)
         : null;
@@ -205,13 +217,11 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
   void didUpdateWidget(_AttendanceRow oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.attendance != widget.attendance || oldWidget.isMarked != widget.isMarked) {
-         _status = widget.attendance.status;
-        _timeIn = widget.attendance.timeIn != null && widget.attendance.timeIn!.isNotEmpty
-            ? app_date_utils.DateUtils.parseTime(widget.attendance.timeIn!)
-            : null;
-        _timeOut = widget.attendance.timeOut != null && widget.attendance.timeOut!.isNotEmpty
-            ? app_date_utils.DateUtils.parseTime(widget.attendance.timeOut!)
-            : null;
+         _initializeState();
+         // If unmarking (deleted externally?), go back to edit mode
+         if (!widget.isMarked) _isEditing = true;
+         // If marked, default to viewing, unless we are actively editing
+         if (widget.isMarked && !_isEditing) _isEditing = false;
     }
   }
 
@@ -223,25 +233,33 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
           await AttendanceRepository.delete(widget.attendance.id!);
         }
       } else {
+        // Validation: If status is Absent, Time In/Out optional?
+        // If status is present/halfday, ensure consistency? 
+        
         final newAttendance = widget.attendance.copyWith(
-          workerName: widget.worker.name, // Ensure name is preserved
+          workerName: widget.worker.name,
           status: _status,
           timeIn: _timeIn?.format(context) ?? '',
           timeOut: _timeOut?.format(context),
         );
 
         if (widget.isMarked && widget.attendance.id != null) {
-          await AttendanceRepository.update(newAttendance);
+           await AttendanceRepository.update(newAttendance);
         } else {
-          // If inserting, ensure timeIn is set or default
-          final toInsert = newAttendance.copyWith(
-            timeIn: newAttendance.timeIn == null || newAttendance.timeIn!.isEmpty 
-                ? const TimeOfDay(hour: 9, minute: 0).format(context) 
-                : newAttendance.timeIn,
-          );
+          // Defaults for Time In if not set but Marked Present
+          String tIn = newAttendance.timeIn ?? '';
+          if ((_status == AttendanceStatus.fullDay || _status == AttendanceStatus.halfDay) && tIn.isEmpty) {
+             tIn = const TimeOfDay(hour: 9, minute: 0).format(context);
+          }
+           
+          final toInsert = newAttendance.copyWith(timeIn: tIn);
           await AttendanceRepository.insert(toInsert);
         }
       }
+      
+      // Exit edit mode on save
+      if (!isDelete) setState(() => _isEditing = false);
+      
       widget.onUpdate();
     } catch (e) {
       if (mounted) {
@@ -274,96 +292,84 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
             // Status
             Expanded(
               flex: 2,
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<AttendanceStatus>(
-                  value: _status,
-                  isDense: true,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                  items: [
-                    DropdownMenuItem(
-                      value: AttendanceStatus.fullDay,
-                      child: StatusBadge(label: 'Full Day', type: StatusType.success, compact: true),
-                    ),
-                    DropdownMenuItem(
-                      value: AttendanceStatus.halfDay,
-                      child: StatusBadge(label: 'Half Day', type: StatusType.warning, compact: true),
-                    ),
-                    DropdownMenuItem(
-                      value: AttendanceStatus.absent,
-                      child: StatusBadge(label: 'Absent', type: StatusType.error, compact: true),
-                    ),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) {
-                         setState(() => _status = val);
-                         _save(); // Auto-save on change? User requested "Edit" button...
-                         // Let's implement explicit save via the Edit/Save button logic as user requested.
-                         // Wait, user said "Edit and Delete button". 
-                         // "Edit" usually implies entering edit mode.
-                         // But for a grid like this, direct manipulation is faster.
-                         // Ideally, changes should be saved.
-                         // I'll make the fields interactive but they only commit when you click "Save" or auto-save?
-                         // "Edit" button at the end suggests read-only by default.
-                         // But that's annoying for bulk entry.
-                         // I will make it interactive and auto-save OR have a save button at the row end.
-                         // User said: "another column where the user can select: ... And last column where the user can select timeout, and also at last edit and delete button."
-                         // This implies the action column has the buttons.
-                         // I'll implementing direct selection updates state, but 'Edit' button?
-                         // Maybe the user means "Update" button to confirm changes?
-                         // Or proper "Edit" mode where fields unlock?
-                         // Let's go with: Fields are always editable for simplicity in Full Screen, the "Edit" button acts as a specific "Update" trigger if user wants to be explicit, or maybe it's "Save" if the row is new.
-                    }
-                  },
-                ),
-              ),
+              child: _isEditing 
+                ? DropdownButtonHideUnderline(
+                  child: DropdownButton<AttendanceStatus>(
+                    value: _status,
+                    isDense: true,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    items: [
+                      DropdownMenuItem(
+                        value: AttendanceStatus.fullDay,
+                        child: StatusBadge(label: 'Full Day', type: StatusType.success, compact: true),
+                      ),
+                      DropdownMenuItem(
+                        value: AttendanceStatus.halfDay,
+                        child: StatusBadge(label: 'Half Day', type: StatusType.warning, compact: true),
+                      ),
+                      DropdownMenuItem(
+                        value: AttendanceStatus.absent,
+                        child: StatusBadge(label: 'Absent', type: StatusType.error, compact: true),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) setState(() => _status = val);
+                    },
+                  ),
+                )
+                : StatusBadge(
+                    label: _status.displayName,
+                    type: _status == AttendanceStatus.fullDay || _status == AttendanceStatus.present
+                        ? StatusType.success
+                        : (_status == AttendanceStatus.halfDay ? StatusType.warning : StatusType.error),
+                    compact: true,
+                  ),
             ),
             
             // Time In
             Expanded(
               flex: 2,
-              child: InkWell(
-                onTap: () async {
-                  final t = await showTimePicker(context: context, initialTime: _timeIn ?? const TimeOfDay(hour: 9, minute: 0));
-                  if (t != null) {
-                    setState(() => _timeIn = t);
-                    // _save(); 
-                  }
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    _timeIn?.format(context) ?? 'Set Time',
-                    style: TextStyle(
-                      color: _timeIn == null ? Theme.of(context).hintColor : null,
-                      decoration: _timeIn == null ? TextDecoration.underline : null,
-                      decorationStyle: TextDecorationStyle.dotted,
-                    ),
-                  ),
-                ),
-              ),
+              child: _isEditing
+                  ? InkWell(
+                      onTap: () async {
+                        final t = await showTimePicker(context: context, initialTime: _timeIn ?? const TimeOfDay(hour: 9, minute: 0));
+                        if (t != null) setState(() => _timeIn = t);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          _timeIn?.format(context) ?? 'Set Time',
+                          style: TextStyle(
+                            color: _timeIn == null ? Theme.of(context).hintColor : null,
+                            decoration: _timeIn == null ? TextDecoration.underline : null,
+                            decorationStyle: TextDecorationStyle.dotted,
+                          ),
+                        ),
+                      ),
+                    )
+                  : Text(_timeIn?.format(context) ?? '-', style: const TextStyle(fontWeight: FontWeight.w500)),
             ),
             
             // Time Out
             Expanded(
               flex: 2,
-              child: InkWell(
-                onTap: () async {
-                  final t = await showTimePicker(context: context, initialTime: _timeOut ?? const TimeOfDay(hour: 18, minute: 0));
-                  if (t != null) {
-                    setState(() => _timeOut = t);
-                    // _save();
-                  }
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    _timeOut?.format(context) ?? '-',
-                    style: TextStyle(
-                      color: _timeOut == null ? Theme.of(context).hintColor : null,
-                    ),
-                  ),
-                ),
-              ),
+              child: _isEditing
+                  ? InkWell(
+                      onTap: () async {
+                        final t = await showTimePicker(context: context, initialTime: _timeOut ?? const TimeOfDay(hour: 18, minute: 0));
+                        if (t != null) setState(() => _timeOut = t);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          _timeOut?.format(context) ?? '-',
+                          style: TextStyle(
+                            color: _timeOut == null ? Theme.of(context).hintColor : null,
+                          ),
+                        ),
+                      ),
+                    )
+                  : Text(_timeOut?.format(context) ?? '-'),
             ),
             
             // Actions
@@ -374,27 +380,38 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
                 children: [
                    if (_isSaving)
                      const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                   else ...[
-                      // Save/Update Button (Visible if active or changed, or just always visible for clarity as 'Edit' was requested)
-                      // If it's already marked, we show 'Edit' icon? Or 'Check' icon?
+                   else if (_isEditing) ...[
+                      // Save Button
                       IconButton(
-                        icon: Icon( widget.isMarked ? Icons.save_as_outlined : Icons.save_alt, 
-                          color: widget.isMarked ? AppColors.primaryBlue : AppColors.success,
-                          size: 20,
-                        ),
-                        tooltip: widget.isMarked ? 'Update' : 'Mark Present',
+                        icon: const Icon(Icons.check, color: AppColors.success, size: 20),
+                        tooltip: 'Save',
                         onPressed: () => _save(),
                       ),
-                      
-                      const SizedBox(width: 8),
-                      
-                      // Delete Button (Only if marked)
+                      // Cancel Button (Only if it was already marked, i.e., we are updating)
                       if (widget.isMarked)
                         IconButton(
+                          icon: const Icon(Icons.close, color: AppColors.error, size: 20),
+                          tooltip: 'Cancel',
+                          onPressed: () {
+                             setState(() {
+                               _initializeState();
+                               _isEditing = false;
+                             });
+                          },
+                        ),
+                   ] else ...[
+                      // Edit Button
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, color: AppColors.primaryBlue, size: 20),
+                        tooltip: 'Edit',
+                        onPressed: () => setState(() => _isEditing = true),
+                      ),
+                      // Delete Button
+                      IconButton(
                            icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 20),
                            tooltip: 'Remove',
                            onPressed: () => _save(isDelete: true),
-                        ),
+                      ),
                    ]
                 ],
               ),

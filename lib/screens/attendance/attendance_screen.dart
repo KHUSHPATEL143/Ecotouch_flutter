@@ -160,9 +160,28 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Attendance',
-                      style: Theme.of(context).textTheme.displayMedium,
+                    Row(
+                      children: [
+                        Text(
+                          'Attendance',
+                          style: Theme.of(context).textTheme.displayMedium,
+                        ),
+                        const SizedBox(width: 8),
+                         // Full Screen Button
+                        IconButton(
+                          onPressed: (attendanceAsync.hasValue && labourersAsync.hasValue) 
+                              ? () => _openFullScreen(labourersAsync.value!, attendanceAsync.value!) 
+                              : null,
+                          icon: const Icon(Icons.fullscreen),
+                          tooltip: 'Full Screen Mode (F11)',
+                           style: IconButton.styleFrom(
+                            backgroundColor: Theme.of(context).brightness == Brightness.dark
+                                ? AppColors.darkSurfaceVariant
+                                : AppColors.lightSurfaceVariant,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -174,22 +193,6 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                   ],
                 ),
                 const Spacer(),
-
-                // Full Screen Button
-                IconButton(
-                  onPressed: (attendanceAsync.hasValue && labourersAsync.hasValue) 
-                      ? () => _openFullScreen(labourersAsync.value!, attendanceAsync.value!) 
-                      : null,
-                  icon: const Icon(Icons.fullscreen),
-                  tooltip: 'Full Screen Mode (F11)',
-                   style: IconButton.styleFrom(
-                    backgroundColor: Theme.of(context).brightness == Brightness.dark
-                        ? AppColors.darkSurfaceVariant
-                        : AppColors.lightSurfaceVariant,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-                const SizedBox(width: 8),
 
                 // Export Button
                 IconButton(
