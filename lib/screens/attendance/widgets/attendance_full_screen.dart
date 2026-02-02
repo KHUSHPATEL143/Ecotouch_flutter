@@ -234,13 +234,6 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
         }
       } else {
         // Validation: If status is Absent, Time In/Out optional?
-        // If status is present/halfday, ensure consistency? 
-        
-        final newAttendance = widget.attendance.copyWith(
-          workerName: widget.worker.name,
-          status: _status,
-      } else {
-        // Validation: If status is Absent, Time In/Out optional?
         
         // Use standard HH:mm format for storage
         final tIn = _timeIn != null ? app_date_utils.DateUtils.formatTimeOfDay(_timeIn!) : '';
