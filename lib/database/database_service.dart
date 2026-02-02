@@ -31,7 +31,7 @@ class DatabaseService {
       // Open database
       _database = await openDatabase(
         databasePath,
-        version: 17,
+        version: 18,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
         onConfigure: _onConfigure,
@@ -587,6 +587,48 @@ class DatabaseService {
         print('Migration to v16 (Fix Schema Integrity) completed successfully');
       } catch (e) {
         print('Error in version 16 migration: $e');
+      }
+    }
+
+    if (oldVersion < 18) {
+      // Version 18: Update Attendance table to allow 'absent' status in CHECK constraint
+      try {
+        await db.transaction((txn) async {
+          // 1. Rename existing table
+          // Check if table exists first to be safe, or just run catch block? standard is try/catch
+          await txn.execute('ALTER TABLE attendance RENAME TO attendance_old');
+
+          // 2. Create new table with updated CHECK constraint
+          await txn.execute('''
+            CREATE TABLE attendance (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              worker_id INTEGER NOT NULL,
+              date TEXT NOT NULL,
+              status TEXT NOT NULL CHECK(status IN ('full_day', 'half_day', 'absent')),
+              time_in TEXT,
+              time_out TEXT,
+              FOREIGN KEY(worker_id) REFERENCES workers(id) ON DELETE CASCADE,
+              UNIQUE(worker_id, date)
+            )
+          ''');
+
+          // 3. Copy data
+          // Status 'absent' didn't exist, so we copy everything 1:1
+          await txn.execute('''
+            INSERT INTO attendance (id, worker_id, date, status, time_in, time_out)
+            SELECT id, worker_id, date, status, time_in, time_out FROM attendance_old
+          ''');
+
+          // 4. Drop old table
+          await txn.execute('DROP TABLE attendance_old');
+
+          // 5. Recreate Indexes
+          await txn.execute('CREATE INDEX idx_attendance_date ON attendance(date)');
+          await txn.execute('CREATE INDEX idx_attendance_worker ON attendance(worker_id)');
+        });
+        print('Migration to v18 (Attendance Schema Update) completed successfully');
+      } catch (e) {
+        print('Error in version 18 migration: $e');
       }
     }
   }

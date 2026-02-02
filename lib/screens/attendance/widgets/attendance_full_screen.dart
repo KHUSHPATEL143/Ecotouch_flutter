@@ -90,7 +90,9 @@ class _AttendanceFullScreenState extends ConsumerState<AttendanceFullScreen> {
                 
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Marked ${unmarkedWorkers.length} workers as Absent')));
               } catch(e) {
-                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error));
+                 String msg = 'Failed to mark attendance';
+                 if (e.toString().contains('constraint failed')) msg = 'Error: Database constraint failed';
+                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: AppColors.error));
               }
             },
             icon: const Icon(Icons.playlist_add_check),
@@ -303,7 +305,13 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
       widget.onUpdate();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error));
+        String msg = 'Failed to save attendance';
+        if (e.toString().contains('constraint failed')) {
+           msg = 'Error: Invalid status selected';
+        } else if (e.toString().contains('UNIQUE constraint failed')) {
+           msg = 'Error: Attendance already marked for this worker';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: AppColors.error));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

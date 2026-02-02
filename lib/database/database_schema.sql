@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS attendance (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   worker_id INTEGER NOT NULL,
   date TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('full_day', 'half_day')),
+  status TEXT NOT NULL CHECK(status IN ('full_day', 'half_day', 'absent')),
   time_in TEXT,
   time_out TEXT,
   FOREIGN KEY(worker_id) REFERENCES workers(id) ON DELETE CASCADE,
