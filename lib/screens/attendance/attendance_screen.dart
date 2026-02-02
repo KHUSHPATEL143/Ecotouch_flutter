@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
@@ -11,6 +12,7 @@ import '../../providers/global_providers.dart';
 import '../../widgets/status_badge.dart';
 import '../../services/export_service.dart';
 import '../../widgets/export_dialog.dart';
+import 'widgets/attendance_full_screen.dart';
 
 final attendanceListProvider =
     FutureProvider.family<List<Attendance>, DateTime>((ref, date) async {
@@ -127,13 +129,33 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     }
   }
 
+  void _openFullScreen(List<Worker> workers, List<Attendance> attendance) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => AttendanceFullScreen(
+          workers: workers,
+          attendanceList: attendance,
+          onClose: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final selectedDate = ref.watch(selectedDateProvider);
     final attendanceAsync = ref.watch(attendanceListProvider(selectedDate));
     final labourersAsync = ref.watch(labourersProvider);
 
-    return Scaffold(
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.f11): () {
+           if (attendanceAsync.hasValue && labourersAsync.hasValue) {
+             _openFullScreen(labourersAsync.value!, attendanceAsync.value!);
+           }
+        }
+      },
+      child: Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Column(
         children: [
@@ -159,6 +181,22 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                   ],
                 ),
                 const Spacer(),
+
+                // Full Screen Button
+                IconButton(
+                  onPressed: (attendanceAsync.hasValue && labourersAsync.hasValue) 
+                      ? () => _openFullScreen(labourersAsync.value!, attendanceAsync.value!) 
+                      : null,
+                  icon: const Icon(Icons.fullscreen),
+                  tooltip: 'Full Screen Mode (F11)',
+                   style: IconButton.styleFrom(
+                    backgroundColor: Theme.of(context).brightness == Brightness.dark
+                        ? AppColors.darkSurfaceVariant
+                        : AppColors.lightSurfaceVariant,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(width: 8),
 
                 // Export Button
                 IconButton(
