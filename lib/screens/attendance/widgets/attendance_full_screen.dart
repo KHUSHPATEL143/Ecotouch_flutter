@@ -319,7 +319,7 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
                 )
                 : StatusBadge(
                     label: _status.displayName,
-                    type: _status == AttendanceStatus.fullDay || _status == AttendanceStatus.present
+                    type: _status == AttendanceStatus.fullDay
                         ? StatusType.success
                         : (_status == AttendanceStatus.halfDay ? StatusType.warning : StatusType.error),
                     compact: true,
