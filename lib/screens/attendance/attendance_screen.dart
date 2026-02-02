@@ -178,8 +178,10 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
            if (_editingId != null) _cancelEdit();
         },
       },
-      child: Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: Column(
           children: [
             // Main Header
@@ -691,7 +693,8 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
           ),
         ],
       ),
-    ),
+      ),
+      ),
     );
   }
 
