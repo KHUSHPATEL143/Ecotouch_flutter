@@ -14,14 +14,7 @@ import '../../services/export_service.dart';
 import '../../widgets/export_dialog.dart';
 import 'widgets/attendance_full_screen.dart';
 
-final attendanceListProvider =
-    FutureProvider.family<List<Attendance>, DateTime>((ref, date) async {
-  return await AttendanceRepository.getByDate(date);
-});
 
-final labourersProvider = FutureProvider<List<Worker>>((ref) async {
-  return await WorkerRepository.getByType(WorkerType.labour);
-});
 
 class AttendanceScreen extends ConsumerStatefulWidget {
   const AttendanceScreen({super.key});
@@ -156,10 +149,10 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
         }
       },
       child: Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: Column(
-        children: [
-          // Main Header
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: Column(
+          children: [
+            // Main Header
           Padding(
             padding: const EdgeInsets.fromLTRB(32, 32, 32, 24),
             child: Row(
@@ -665,6 +658,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 

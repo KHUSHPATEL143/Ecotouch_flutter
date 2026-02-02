@@ -65,7 +65,8 @@ class Attendance {
 
 enum AttendanceStatus {
   fullDay('full_day'),
-  halfDay('half_day');
+  halfDay('half_day'),
+  absent('absent');
   
   final String value;
   const AttendanceStatus(this.value);
@@ -83,6 +84,8 @@ enum AttendanceStatus {
         return 'Full Day';
       case AttendanceStatus.halfDay:
         return 'Half Day';
+      case AttendanceStatus.absent:
+        return 'Absent';
     }
   }
 }

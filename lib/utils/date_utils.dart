@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'constants.dart';
 
@@ -17,6 +18,23 @@ class DateUtils {
     if (dateString == null || dateString.isEmpty) return null;
     try {
       return DateFormat(AppConstants.databaseDateFormat).parse(dateString);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Parse time string (HH:mm) to TimeOfDay
+  static TimeOfDay? parseTime(String? timeString) {
+    if (timeString == null || timeString.isEmpty) return null;
+    try {
+      final parts = timeString.split(':');
+      if (parts.length == 2) {
+        return TimeOfDay(
+          hour: int.parse(parts[0]), 
+          minute: int.parse(parts[1])
+        );
+      }
+      return null;
     } catch (e) {
       return null;
     }

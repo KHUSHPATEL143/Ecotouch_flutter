@@ -14,10 +14,24 @@ import '../database/repositories/attendance_repository.dart';
 import '../database/repositories/production_repository.dart';
 import '../services/stock_calculation_service.dart';
 
+import '../models/attendance.dart';
+import '../models/worker.dart';
+import '../database/repositories/attendance_repository.dart';
+import '../database/repositories/worker_repository.dart';
+
 /// Global provider for selected date (affects all tabs)
 final selectedDateProvider = StateProvider<DateTime>((ref) {
   final now = DateTime.now();
   return DateTime(now.year, now.month, now.day);
+});
+
+final attendanceListProvider =
+    FutureProvider.family<List<Attendance>, DateTime>((ref, date) async {
+  return await AttendanceRepository.getByDate(date);
+});
+
+final labourersProvider = FutureProvider<List<Worker>>((ref) async {
+  return await WorkerRepository.getByType(WorkerType.labour);
 });
 
 /// Provider for SharedPreferences instance (must be overridden in main)

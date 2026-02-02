@@ -4,8 +4,7 @@ import '../theme/app_colors.dart';
 class StatusBadge extends StatelessWidget {
   final String label;
   final StatusType type;
-  final bool showIcon;
-  final double? fontSize;
+  final bool compact;
 
   const StatusBadge({
     super.key,
@@ -13,6 +12,7 @@ class StatusBadge extends StatelessWidget {
     required this.type,
     this.showIcon = true,
     this.fontSize,
+    this.compact = false,
   });
 
   @override
@@ -101,7 +101,9 @@ class StatusBadge extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: compact 
+          ? const EdgeInsets.symmetric(horizontal: 6, vertical: 2)
+          : const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(4),
@@ -112,7 +114,7 @@ class StatusBadge extends StatelessWidget {
           if (showIcon) ...[
             Icon(
               icon!,
-              size: (fontSize ?? 12) + 2,
+              size: (fontSize ?? (compact ? 10 : 12)) + 2,
               color: textColor,
             ),
             const SizedBox(width: 4),
@@ -120,7 +122,7 @@ class StatusBadge extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: fontSize ?? 12,
+              fontSize: fontSize ?? (compact ? 10 : 12),
               fontWeight: FontWeight.w600,
               color: textColor,
             ),
