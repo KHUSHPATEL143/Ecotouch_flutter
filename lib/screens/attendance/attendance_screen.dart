@@ -146,7 +146,37 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
            if (attendanceAsync.hasValue && labourersAsync.hasValue) {
              _openFullScreen(labourersAsync.value!, attendanceAsync.value!);
            }
-        }
+        },
+        const SingleActivator(LogicalKeyboardKey.enter, alt: true): () { // Alt+Enter Full Screen
+           if (attendanceAsync.hasValue && labourersAsync.hasValue) {
+             _openFullScreen(labourersAsync.value!, attendanceAsync.value!);
+           }
+        },
+        const SingleActivator(LogicalKeyboardKey.keyS, control: true): () { // Ctrl+S Save
+           if (_selectedWorker != null && _selectedStatus != null && _timeIn != null && !_isSubmitting) {
+             _markAttendance();
+           } else {
+             ScaffoldMessenger.of(context).showSnackBar(
+               const SnackBar(content: Text('Please fill all required fields'), duration: Duration(seconds: 1)),
+             );
+           }
+        },
+        const SingleActivator(LogicalKeyboardKey.keyN, control: true): () { // Ctrl+N New/Reset
+           if (_editingId != null) {
+              _cancelEdit();
+           } else {
+             // Reset form if desired, or focus worker dropdown
+             setState(() {
+               _selectedWorker = null;
+               _selectedStatus = null;
+               _timeIn = null;
+               _timeOut = null;
+             });
+           }
+        },
+        const SingleActivator(LogicalKeyboardKey.escape): () { // Esc Cancel
+           if (_editingId != null) _cancelEdit();
+        },
       },
       child: Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,

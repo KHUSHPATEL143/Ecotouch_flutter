@@ -54,15 +54,15 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
   Widget build(BuildContext context) {
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.digit1, meta: true): () => setState(() => _selectedIndex = 0), // Alt+1 Dashboard
-        const SingleActivator(LogicalKeyboardKey.digit2, meta: true): () => setState(() => _selectedIndex = 1), // Alt+2 Attendance
-        const SingleActivator(LogicalKeyboardKey.digit3, meta: true): () => setState(() => _selectedIndex = 2), // Alt+3 Inward
-        const SingleActivator(LogicalKeyboardKey.digit4, meta: true): () => setState(() => _selectedIndex = 3), // Alt+4 Production
-        const SingleActivator(LogicalKeyboardKey.digit5, meta: true): () => setState(() => _selectedIndex = 4), // Alt+5 Outward
-        const SingleActivator(LogicalKeyboardKey.digit6, meta: true): () => setState(() => _selectedIndex = 5), // Alt+6 Logistics
-        const SingleActivator(LogicalKeyboardKey.digit7, meta: true): () => setState(() => _selectedIndex = 6), // Alt+7 Inventory
-        const SingleActivator(LogicalKeyboardKey.digit8, meta: true): () => setState(() => _selectedIndex = 7), // Alt+8 Summary
-        const SingleActivator(LogicalKeyboardKey.digit9, meta: true): () => setState(() => _selectedIndex = 8), // Alt+9 Settings
+        const SingleActivator(LogicalKeyboardKey.digit1, alt: true): () => setState(() => _selectedIndex = 0), // Alt+1 Dashboard
+        const SingleActivator(LogicalKeyboardKey.digit2, alt: true): () => setState(() => _selectedIndex = 1), // Alt+2 Attendance
+        const SingleActivator(LogicalKeyboardKey.digit3, alt: true): () => setState(() => _selectedIndex = 2), // Alt+3 Inward
+        const SingleActivator(LogicalKeyboardKey.digit4, alt: true): () => setState(() => _selectedIndex = 3), // Alt+4 Production
+        const SingleActivator(LogicalKeyboardKey.digit5, alt: true): () => setState(() => _selectedIndex = 4), // Alt+5 Outward
+        const SingleActivator(LogicalKeyboardKey.digit6, alt: true): () => setState(() => _selectedIndex = 5), // Alt+6 Logistics
+        const SingleActivator(LogicalKeyboardKey.digit7, alt: true): () => setState(() => _selectedIndex = 6), // Alt+7 Inventory
+        const SingleActivator(LogicalKeyboardKey.digit8, alt: true): () => setState(() => _selectedIndex = 7), // Alt+8 Summary
+        const SingleActivator(LogicalKeyboardKey.digit9, alt: true): () => setState(() => _selectedIndex = 8), // Alt+9 Settings
       },
       child: Focus(
         autofocus: true,
