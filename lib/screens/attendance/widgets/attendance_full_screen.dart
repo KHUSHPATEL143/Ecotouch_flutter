@@ -333,7 +333,7 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
             Expanded(
               flex: 2,
               child: _isEditing 
-                ? Container( // Add visual cue for dropdown
+                ? Container(
                   decoration: BoxDecoration(
                     border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
                   ),
@@ -343,7 +343,7 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
                       isDense: true,
                       isExpanded: true,
                       style: Theme.of(context).textTheme.bodyMedium,
-                      icon: const Icon(Icons.arrow_drop_down), // Ensure arrow is visible
+                      icon: const Icon(Icons.arrow_drop_down),
                       items: [
                         DropdownMenuItem(
                           value: AttendanceStatus.fullDay,
@@ -359,12 +359,26 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
                         ),
                       ],
                       onChanged: (val) {
-                        if (val != null) setState(() => _status = val);
+                        if (val != null) {
+                           setState(() {
+                             _status = val;
+                             // clear time if absent
+                             if (val == AttendanceStatus.absent) {
+                               _timeIn = null;
+                               _timeOut = null;
+                             }
+                           });
+                           
+                           // Auto-save if switching to Absent
+                           if (val == AttendanceStatus.absent) {
+                              _save();
+                           }
+                        }
                       },
                     ),
                   ),
                 )
-                : Align( // Prevent stretching
+                : Align(
                     alignment: Alignment.centerLeft,
                     child: StatusBadge(
                       label: _status.displayName,
@@ -379,7 +393,7 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
             // Time In
             Expanded(
               flex: 2,
-              child: _isEditing
+              child: (_isEditing && _status != AttendanceStatus.absent)
                   ? InkWell(
                       onTap: () async {
                         final t = await showTimePicker(context: context, initialTime: _timeIn ?? const TimeOfDay(hour: 9, minute: 0));
@@ -397,13 +411,13 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
                         ),
                       ),
                     )
-                  : Text(_timeIn?.format(context) ?? '-', style: const TextStyle(fontWeight: FontWeight.w500)),
+                  : Text((_status == AttendanceStatus.absent) ? '-' : (_timeIn?.format(context) ?? '-'), style: const TextStyle(fontWeight: FontWeight.w500)),
             ),
             
             // Time Out
             Expanded(
               flex: 2,
-              child: _isEditing
+              child: (_isEditing && _status != AttendanceStatus.absent)
                   ? InkWell(
                       onTap: () async {
                         final t = await showTimePicker(context: context, initialTime: _timeOut ?? const TimeOfDay(hour: 18, minute: 0));
@@ -419,7 +433,7 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
                         ),
                       ),
                     )
-                  : Text(_timeOut?.format(context) ?? '-'),
+                  : Text((_status == AttendanceStatus.absent) ? '-' : (_timeOut?.format(context) ?? '-')),
             ),
             
             // Actions
