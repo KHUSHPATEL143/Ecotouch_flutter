@@ -40,6 +40,13 @@ class DateUtils {
     }
   }
   
+  /// Format TimeOfDay to string (HH:mm) for database storage
+  static String formatTimeOfDay(TimeOfDay time) {
+    final hour = time.hour.toString().padLeft(2, '0');
+    final minute = time.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
   /// Format time to display format (HH:mm)
   static String formatTime(DateTime time) {
     return DateFormat(AppConstants.displayTimeFormat).format(time);

@@ -239,20 +239,30 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
         final newAttendance = widget.attendance.copyWith(
           workerName: widget.worker.name,
           status: _status,
-          timeIn: _timeIn?.format(context) ?? '',
-          timeOut: _timeOut?.format(context),
+      } else {
+        // Validation: If status is Absent, Time In/Out optional?
+        
+        // Use standard HH:mm format for storage
+        final tIn = _timeIn != null ? app_date_utils.DateUtils.formatTimeOfDay(_timeIn!) : '';
+        final tOut = _timeOut != null ? app_date_utils.DateUtils.formatTimeOfDay(_timeOut!) : null;
+
+        final newAttendance = widget.attendance.copyWith(
+          workerName: widget.worker.name,
+          status: _status,
+          timeIn: tIn,
+          timeOut: tOut,
         );
 
         if (widget.isMarked && widget.attendance.id != null) {
            await AttendanceRepository.update(newAttendance);
         } else {
           // Defaults for Time In if not set but Marked Present
-          String tIn = newAttendance.timeIn ?? '';
-          if ((_status == AttendanceStatus.fullDay || _status == AttendanceStatus.halfDay) && tIn.isEmpty) {
-             tIn = const TimeOfDay(hour: 9, minute: 0).format(context);
+          String finalTimeIn = tIn;
+          if ((_status == AttendanceStatus.fullDay || _status == AttendanceStatus.halfDay) && finalTimeIn.isEmpty) {
+             finalTimeIn = app_date_utils.DateUtils.formatTimeOfDay(const TimeOfDay(hour: 9, minute: 0));
           }
            
-          final toInsert = newAttendance.copyWith(timeIn: tIn);
+          final toInsert = newAttendance.copyWith(timeIn: finalTimeIn);
           await AttendanceRepository.insert(toInsert);
         }
       }
@@ -296,7 +306,8 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
                 ? DropdownButtonHideUnderline(
                   child: DropdownButton<AttendanceStatus>(
                     value: _status,
-                    isDense: true,
+                    isDense: true, // Fix for layout overflow
+                    isExpanded: true,
                     style: Theme.of(context).textTheme.bodyMedium,
                     items: [
                       DropdownMenuItem(
@@ -400,6 +411,20 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
                           },
                         ),
                    ] else ...[
+                      // Mark Out Button (If present and no time out)
+                      if (_status != AttendanceStatus.absent && _timeOut == null)
+                        IconButton(
+                          icon: const Icon(Icons.logout, color: AppColors.primaryBlue, size: 20),
+                          tooltip: 'Mark Out',
+                          onPressed: () async {
+                              final t = await showTimePicker(context: context, initialTime: const TimeOfDay(hour: 18, minute: 0));
+                              if (t != null) {
+                                setState(() => _timeOut = t);
+                                _save();
+                              }
+                          },
+                        ),
+                   
                       // Edit Button
                       IconButton(
                         icon: const Icon(Icons.edit_outlined, color: AppColors.primaryBlue, size: 20),
