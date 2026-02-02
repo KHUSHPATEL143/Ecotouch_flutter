@@ -33,6 +33,9 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> with SingleTicker
   void initState() {
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
+    _tabController.addListener(() {
+      setState(() {});
+    });
   }
 
   @override
@@ -54,7 +57,7 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> with SingleTicker
             child: Row(
               children: [
                 Text(
-                  'Summary: Production Reports', // Dynamic based on tab?
+                  'Summary: ${_tabs[_tabController.index]}',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),

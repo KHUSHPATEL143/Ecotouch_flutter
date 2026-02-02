@@ -699,27 +699,26 @@ class DatabaseService {
 
   /// Backup database to specified path
   static Future<void> backupDatabase(String backupPath) async {
-    if (_currentDatabasePath == null) {
+    final path = _currentDatabasePath;
+    if (path == null) {
       throw Exception('No database is currently open');
     }
 
     try {
-      // Close database before copying
+      // Close database before copying to ensure data integrity
       await closeDatabase();
 
       // Copy file
-      final sourceFile = File(_currentDatabasePath!);
+      final sourceFile = File(path);
       await sourceFile.copy(backupPath);
 
       // Reopen database
-      await initDatabase(_currentDatabasePath!);
+      await initDatabase(path);
 
       print('Database backed up to: $backupPath');
     } catch (e) {
       // Reopen database even if backup failed
-      if (_currentDatabasePath != null) {
-        await initDatabase(_currentDatabasePath!);
-      }
+      await initDatabase(path);
       throw Exception('Failed to backup database: $e');
     }
   }
@@ -740,6 +739,8 @@ class DatabaseService {
 
       print('Database restored from: $backupPath');
     } catch (e) {
+      // Reopen database even if restore failed to prevent app crash
+      await initDatabase(targetPath);
       throw Exception('Failed to restore database: $e');
     }
   }
