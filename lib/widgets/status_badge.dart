@@ -5,6 +5,8 @@ class StatusBadge extends StatelessWidget {
   final String label;
   final StatusType type;
   final bool compact;
+  final bool showIcon;
+  final double? fontSize;
 
   const StatusBadge({
     super.key,
