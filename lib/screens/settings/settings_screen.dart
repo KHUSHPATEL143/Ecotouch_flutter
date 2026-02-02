@@ -8,6 +8,7 @@ import 'widgets/categories_management.dart';
 import 'widgets/vehicles_management.dart';
 import 'widgets/preferences_panel.dart';
 import 'widgets/unit_conversions_management.dart';
+import 'widgets/data_backup_management.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -25,6 +26,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _SettingItem(icon: Icons.category_outlined, label: 'Categories', description: 'Product types'),
     _SettingItem(icon: Icons.local_shipping_outlined, label: 'Vehicles', description: 'Logistics fleet'),
     _SettingItem(icon: Icons.swap_horiz, label: 'Unit Conversions', description: 'Define conversion rates'),
+    _SettingItem(icon: Icons.backup_outlined, label: 'Data Management', description: 'Backup & Restore'),
     _SettingItem(icon: Icons.settings_outlined, label: 'Preferences', description: 'App configuration'),
   ];
 
@@ -34,6 +36,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     CategoriesManagement(),
     VehiclesManagement(),
     UnitConversionsManagement(),
+    DataBackupManagement(),
     PreferencesPanel(),
   ];
 
