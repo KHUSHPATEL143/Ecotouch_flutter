@@ -59,11 +59,48 @@ class _AttendanceFullScreenState extends ConsumerState<AttendanceFullScreen> {
           tooltip: 'Close (Esc)',
         ),
         actions: [
+          TextButton.icon(
+            onPressed: () async {
+              try {
+                // Find workers who don't have attendance marked
+                final attendanceList = attendanceAsync.value ?? widget.attendanceList;
+                final markedWorkerIds = attendanceList.map((a) => a.workerId).toSet();
+                
+                final unmarkedWorkers = widget.workers.where((w) => !markedWorkerIds.contains(w.id)).toList();
+                
+                if (unmarkedWorkers.isEmpty) {
+                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All workers are already marked.')));
+                   return;
+                }
+
+                // Insert Absent for all of them
+                for (final worker in unmarkedWorkers) {
+                   final att = Attendance(
+                     workerId: worker.id!,
+                     workerName: worker.name,
+                     date: selectedDate,
+                     status: AttendanceStatus.absent,
+                     timeIn: '',
+                   );
+                   await AttendanceRepository.insert(att);
+                }
+                
+                ref.invalidate(attendanceListProvider(selectedDate));
+                ref.invalidate(dashboardStatsProvider);
+                
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Marked ${unmarkedWorkers.length} workers as Absent')));
+              } catch(e) {
+                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error));
+              }
+            },
+            icon: const Icon(Icons.playlist_add_check),
+            label: const Text('Mark Remaining Absent'),
+          ),
           Padding(
-            padding: const EdgeInsets.only(right: 16.0),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Center(
               child: Text(
-                'Total Workers: ${widget.workers.length} | Present: ${currentAttendanceList.where((a) => a.status != AttendanceStatus.absent).length}',
+                'Total: ${widget.workers.length} | Present: ${currentAttendanceList.where((a) => a.status != AttendanceStatus.absent).length}',
                 style: theme.textTheme.bodyMedium,
               ),
             ),
@@ -296,37 +333,46 @@ class _AttendanceRowState extends ConsumerState<_AttendanceRow> {
             Expanded(
               flex: 2,
               child: _isEditing 
-                ? DropdownButtonHideUnderline(
-                  child: DropdownButton<AttendanceStatus>(
-                    value: _status,
-                    isDense: true, // Fix for layout overflow
-                    isExpanded: true,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    items: [
-                      DropdownMenuItem(
-                        value: AttendanceStatus.fullDay,
-                        child: StatusBadge(label: 'Full Day', type: StatusType.success, compact: true),
-                      ),
-                      DropdownMenuItem(
-                        value: AttendanceStatus.halfDay,
-                        child: StatusBadge(label: 'Half Day', type: StatusType.warning, compact: true),
-                      ),
-                      DropdownMenuItem(
-                        value: AttendanceStatus.absent,
-                        child: StatusBadge(label: 'Absent', type: StatusType.error, compact: true),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) setState(() => _status = val);
-                    },
+                ? Container( // Add visual cue for dropdown
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<AttendanceStatus>(
+                      value: _status,
+                      isDense: true,
+                      isExpanded: true,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                      icon: const Icon(Icons.arrow_drop_down), // Ensure arrow is visible
+                      items: [
+                        DropdownMenuItem(
+                          value: AttendanceStatus.fullDay,
+                          child: Text(AttendanceStatus.fullDay.displayName),
+                        ),
+                        DropdownMenuItem(
+                          value: AttendanceStatus.halfDay,
+                          child: Text(AttendanceStatus.halfDay.displayName),
+                        ),
+                        DropdownMenuItem(
+                          value: AttendanceStatus.absent,
+                          child: Text(AttendanceStatus.absent.displayName),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => _status = val);
+                      },
+                    ),
                   ),
                 )
-                : StatusBadge(
-                    label: _status.displayName,
-                    type: _status == AttendanceStatus.fullDay
-                        ? StatusType.success
-                        : (_status == AttendanceStatus.halfDay ? StatusType.warning : StatusType.error),
-                    compact: true,
+                : Align( // Prevent stretching
+                    alignment: Alignment.centerLeft,
+                    child: StatusBadge(
+                      label: _status.displayName,
+                      type: _status == AttendanceStatus.fullDay
+                          ? StatusType.success
+                          : (_status == AttendanceStatus.halfDay ? StatusType.warning : StatusType.error),
+                      compact: true,
+                    ),
                   ),
             ),
             
