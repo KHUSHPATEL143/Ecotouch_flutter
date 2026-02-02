@@ -61,7 +61,7 @@ final recentAttendanceProvider = FutureProvider<Map<int, double>>((ref) async {
     if (status == 'full_day') {
       stats[workerId] = stats[workerId]! + 1.0;
     } else if (status == 'half_day') {
-      stats[workerId] = stats[workerId]! + 0.5;
+      stats[workerId] = stats[workerId]! + 1.0;
     }
   }
 
@@ -383,7 +383,7 @@ class AttendanceReportTab extends ConsumerWidget {
       if (status == 'full_day') {
         workerTotalPresentInView[workerId] = (workerTotalPresentInView[workerId] ?? 0) + 1.0;
       } else if (status == 'half_day') {
-        workerTotalPresentInView[workerId] = (workerTotalPresentInView[workerId] ?? 0) + 0.5;
+        workerTotalPresentInView[workerId] = (workerTotalPresentInView[workerId] ?? 0) + 1.0;
       }
     }
 
