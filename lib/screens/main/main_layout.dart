@@ -248,14 +248,16 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                color: AppColors.primaryBlue.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Theme.of(context).primaryColor.withOpacity(0.3)),
+                border: Border.all(
+                  color: AppColors.primaryBlue.withOpacity(0.5),
+                ),
               ),
-              child: Text(
+              child: const Text(
                 'Today',
                 style: TextStyle(
-                  color: Theme.of(context).primaryColor,
+                  color: AppColors.primaryBlue,
                   fontWeight: FontWeight.w600,
                 ),
               ),

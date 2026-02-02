@@ -288,6 +288,8 @@ class _CategoriesManagementState extends ConsumerState<CategoriesManagement> {
                                             MediaQuery.of(context).size.width *
                                                 0.6),
                                     child: DataTable(
+                                      dataRowMinHeight: 48,
+                                      dataRowMaxHeight: 48,
                                       columnSpacing: 40,
                                       columns: const [
                                         DataColumn(label: Text('Product Name')),
@@ -746,12 +748,9 @@ class _ProductDialogState extends ConsumerState<_ProductDialog>
                                       onSelected: (val) =>
                                           _unitController.text = val,
                                       itemBuilder: (context) => [
-                                        'pieces',
-                                        'boxes',
                                         'kg',
-                                        'tons',
-                                        'sets',
-                                        'Bag'
+                                        'ltr',
+                                        'pieces',
                                       ]
                                           .map((u) => PopupMenuItem(
                                               value: u, child: Text(u)))

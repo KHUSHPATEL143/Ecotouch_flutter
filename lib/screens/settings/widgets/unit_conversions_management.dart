@@ -81,6 +81,8 @@ class UnitConversionsManagement extends ConsumerWidget {
                   ),
                   child: SingleChildScrollView(
                     child: DataTable(
+                      dataRowMinHeight: 48,
+                      dataRowMaxHeight: 48,
                       columnSpacing: 40,
                       columns: const [
                         DataColumn(label: Text('From Unit')),

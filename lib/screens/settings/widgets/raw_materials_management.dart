@@ -8,6 +8,7 @@ import '../../../database/repositories/raw_material_repository.dart';
 import '../../../database/database_service.dart';
 import '../../../utils/validators.dart';
 import '../../../providers/global_providers.dart';
+import '../../../utils/date_utils.dart' as app_date_utils;
 import '../../dashboard/dashboard_screen.dart';
 
 class RawMaterialsManagement extends ConsumerWidget {
@@ -237,10 +238,10 @@ class _RawMaterialDialogState extends ConsumerState<_RawMaterialDialog> {
           // Create Inward Transaction (Opening Stock)
           await DatabaseService.insert('inward', {
             'raw_material_id': id,
-            'date': DateTime.now().toIso8601String(),
-            'package_size': 1,
-            'quantity': initialStock,
-            'total': initialStock,
+            'date': app_date_utils.DateUtils.formatDateForDatabase(DateTime.now()),
+            'bag_size': initialStock,
+            'bag_count': 1,
+            'total_weight': initialStock,
             'notes': 'Opening Stock',
           });
         }
@@ -304,7 +305,7 @@ class _RawMaterialDialogState extends ConsumerState<_RawMaterialDialog> {
                       PopupMenuButton<String>(
                         icon: const Icon(Icons.arrow_drop_down),
                         onSelected: (val) => _unitController.text = val,
-                        itemBuilder: (context) => ['kg', 'ltr', 'pcs', 'boxes', 'tons']
+                        itemBuilder: (context) => ['kg', 'ltr']
                             .map((u) => PopupMenuItem(value: u, child: Text(u)))
                             .toList(),
                       ),

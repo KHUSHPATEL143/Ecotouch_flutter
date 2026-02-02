@@ -51,6 +51,18 @@ class StockCalculationService {
       DateTime upToDate) async {
     final dateStr = app_date_utils.DateUtils.formatDateForDatabase(upToDate);
 
+    // Get initial stock from products
+    final products = await DatabaseService.query('products');
+    final Map<int, double> stock = {};
+
+    for (final product in products) {
+      final id = product['id'] as int;
+      final initialStock = (product['initial_stock'] as num?)?.toDouble() ?? 0;
+      if (initialStock > 0) {
+        stock[id] = initialStock;
+      }
+    }
+
     // Get all production up to date
     final productionResults = await DatabaseService.rawQuery('''
       SELECT product_id, SUM(total_quantity) as total_produced
@@ -67,14 +79,13 @@ class StockCalculationService {
       GROUP BY product_id
     ''', [dateStr]);
 
-    // Calculate stock
-    final Map<int, double> stock = {};
+
 
     // Add production quantities
     for (final row in productionResults) {
       final productId = row['product_id'] as int;
       final totalProduced = (row['total_produced'] as num?)?.toDouble() ?? 0;
-      stock[productId] = totalProduced;
+      stock[productId] = (stock[productId] ?? 0) + totalProduced;
     }
 
     // Subtract sales

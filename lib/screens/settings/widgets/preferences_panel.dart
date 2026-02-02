@@ -5,18 +5,24 @@ import '../../../theme/app_theme.dart';
 import '../../../database/database_service.dart';
 import '../../../utils/validators.dart';
 import '../../../providers/global_providers.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 final preferencesProvider = FutureProvider<Map<String, dynamic>>((ref) async {
-  final results = await DatabaseService.query('preferences', limit: 1);
-  if (results.isEmpty) {
-    return {
-      'company_name': '',
-      'address': '',
-      'phone': '',
-      'email': '',
-    };
+  final results = await DatabaseService.query('preferences');
+  final Map<String, dynamic> prefs = {
+    'company_name': '',
+    'address': '',
+    'phone': '',
+    'email': '',
+    'id': 1, // Dummy ID for tracking
+  };
+  
+  for (final row in results) {
+    if (row['key'] != null && row['value'] != null) {
+      prefs[row['key'] as String] = row['value'];
+    }
   }
-  return results.first;
+  return prefs;
 });
 
 class PreferencesPanel extends ConsumerStatefulWidget {
@@ -235,14 +241,12 @@ class _PreferencesPanelState extends ConsumerState<PreferencesPanel> {
         'email': _emailController.text.trim(),
       };
 
-      if (currentPrefs['id'] == null) {
-        await DatabaseService.insert('preferences', data);
-      } else {
-        await DatabaseService.update(
-          'preferences',
-          data,
-          where: 'id = ?',
-          whereArgs: [currentPrefs['id']],
+      // Save each key-value pair
+      for (final entry in data.entries) {
+        await DatabaseService.insert(
+          'preferences', 
+          {'key': entry.key, 'value': entry.value},
+          conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
 
