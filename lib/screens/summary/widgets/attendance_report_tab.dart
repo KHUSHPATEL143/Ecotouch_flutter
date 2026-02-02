@@ -34,6 +34,41 @@ final attendanceReportProvider =
   return records;
 });
 
+// Provider for last 30 days stats (Current Health)
+final recentAttendanceProvider = FutureProvider<Map<int, double>>((ref) async {
+  final end = DateTime.now();
+  final start = end.subtract(const Duration(days: 30));
+
+  final startStr = app_date_utils.DateUtils.formatDateForDatabase(start);
+  final endStr = app_date_utils.DateUtils.formatDateForDatabase(end);
+
+  final records = await DatabaseService.rawQuery('''
+    SELECT 
+      worker_id,
+      status
+    FROM attendance
+    WHERE date BETWEEN ? AND ?
+  ''', [startStr, endStr]);
+
+  final Map<int, double> stats = {};
+
+  for (final row in records) {
+    final workerId = row['worker_id'] as int;
+    final status = row['status'] as String;
+
+    if (!stats.containsKey(workerId)) stats[workerId] = 0;
+
+    if (status == 'full_day') {
+      stats[workerId] = stats[workerId]! + 1.0;
+    } else if (status == 'half_day') {
+      stats[workerId] = stats[workerId]! + 0.5;
+    }
+  }
+
+  return stats;
+});
+
+
 class AttendanceReportTab extends ConsumerWidget {
   const AttendanceReportTab({super.key});
 
@@ -42,6 +77,7 @@ class AttendanceReportTab extends ConsumerWidget {
     final dateRange = ref.watch(reportDateRangeProvider);
     final viewMode = ref.watch(reportViewModeProvider);
     final attendanceAsync = ref.watch(attendanceReportProvider(dateRange));
+    final recentStatsAsync = ref.watch(recentAttendanceProvider);
 
     return Column(
       children: [
@@ -69,7 +105,11 @@ class AttendanceReportTab extends ConsumerWidget {
                   color: Theme.of(context).dividerColor.withOpacity(0.1)),
             ),
             child: attendanceAsync.when(
-              data: (data) => _buildAttendanceMatrix(context, data, dateRange),
+              data: (data) => recentStatsAsync.when(
+                  data: (recentStats) => _buildAttendanceMatrix(
+                      context, data, dateRange, recentStats),
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (e, s) => Center(child: Text('Error loading stats: $e'))),
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, s) => Center(child: Text('Error: $e')),
             ),
@@ -79,6 +119,7 @@ class AttendanceReportTab extends ConsumerWidget {
     );
   }
 
+  // ... (View Selector and Date Navigator helpers remain same)
   Widget _buildViewSelector(
       BuildContext context, WidgetRef ref, ReportViewMode currentMode) {
     return Container(
@@ -175,16 +216,18 @@ class AttendanceReportTab extends ConsumerWidget {
   }
 
   Future<void> _handleExport(BuildContext context) async {
-    // 1. Show Dialog to get config
+      // ... (Export logic can remain same for now, or updating to include new columns would be ideal but user didn't explicitly ask for export update)
+      // Leaving as is to focus on UI request first
     final config = await showDialog<ExportConfig>(
       context: context,
       builder: (c) => const ExportDialog(title: 'Export Attendance Matrix'),
     );
 
     if (config == null) return;
-
-    // 2. Determine Date Range
-    DateTime start;
+    
+    // ... (rest of export logic same as before)
+    // Re-implementing simplified to avoid context loss
+     DateTime start;
     DateTime end;
 
     if (config.scope == ExportScope.day) {
@@ -203,17 +246,6 @@ class AttendanceReportTab extends ConsumerWidget {
     }
 
     try {
-      // 3. Fetch Data (Flat List)
-      // We need raw data to pivot. Using the repo method.
-      // Note: We need to import AttendanceRepository at the top of file if not present,
-      // or use the provider if accessible.
-      // Since this is a stateless widget, we can use the provider container or just static repo call.
-      // Importing repo is cleaner here.
-
-      // We need to fetch ALL attendance for this range.
-      // Assuming AttendanceRepository is available (it was analyzed earlier).
-      // We might need to add the import if it's missing.
-
       final records = await DatabaseService.rawQuery('''
         SELECT 
           a.date,
@@ -235,13 +267,10 @@ class AttendanceReportTab extends ConsumerWidget {
         }
         return;
       }
-
-      // 4. Pivot Data (Date x Worker)
-
-      // Get all unique workers and dates
-      final Set<String> workerNames = {};
+      
+      // ... (Standard Export implementation)
+       final Set<String> workerNames = {};
       final Set<String> dates = {};
-      // Map: Date -> WorkerName -> Status
       final Map<String, Map<String, String>> matrix = {};
 
       for (var row in records) {
@@ -261,20 +290,18 @@ class AttendanceReportTab extends ConsumerWidget {
       final sortedDates = dates.toList()..sort();
       final sortedWorkers = workerNames.toList()..sort();
 
-      // 5. Prepare Headers
       final List<String> headers = [
         'Date',
         ...sortedWorkers,
         'Total Attendance'
       ];
 
-      // 6. Prepare Rows
       final List<List<dynamic>> rows = [];
 
       for (var date in sortedDates) {
         final List<dynamic> row = [];
         row.add(app_date_utils.DateUtils.formatDate(
-            DateTime.parse(date))); // Date Column
+            DateTime.parse(date))); 
 
         int presentCount = 0;
         int halfDayCount = 0;
@@ -288,11 +315,9 @@ class AttendanceReportTab extends ConsumerWidget {
             row.add('Half Day');
             halfDayCount++;
           } else {
-            row.add('-'); // Absent/Not Marked
+            row.add('-'); 
           }
         }
-
-        // Summary Column
         final List<String> summaryParts = [];
         if (presentCount > 0) summaryParts.add('Present:$presentCount');
         if (halfDayCount > 0) summaryParts.add('Half Day:$halfDayCount');
@@ -300,9 +325,8 @@ class AttendanceReportTab extends ConsumerWidget {
 
         rows.add(row);
       }
-
-      // 7. Export
-      final title =
+      
+       final title =
           'Attendance Matrix (${app_date_utils.DateUtils.formatDate(start)} - ${app_date_utils.DateUtils.formatDate(end)})';
 
       String? path;
@@ -322,58 +346,68 @@ class AttendanceReportTab extends ConsumerWidget {
             content: Text('Exported to $path'),
             backgroundColor: AppColors.success));
       }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    } catch(e) {
+      if(context.mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Export failed: $e'),
             backgroundColor: AppColors.error));
       }
     }
   }
 
-  Widget _buildAttendanceMatrix(BuildContext context,
-      List<Map<String, dynamic>> rawData, DateTimeRange range) {
-    // Process data into a worker-date map
+  Widget _buildAttendanceMatrix(
+      BuildContext context,
+      List<Map<String, dynamic>> rawData,
+      DateTimeRange range,
+      Map<int, double> recentStats) {
+    
+    // Process data
     final Map<int, Map<String, String>> workerAttendance = {};
     final Map<int, String> workerNames = {};
-    final Map<int, int> workerTotalPresent = {};
+    final Map<int, double> workerTotalPresentInView = {}; // Using double to account for half days
 
     for (var row in rawData) {
       final workerId = row['worker_id'] as int;
       final workerName = row['worker_name'] as String? ?? 'Unknown';
-      final dateStr =
-          (row['date'] as String).split('T')[0]; // Format: YYYY-MM-DD
+      final dateStr = (row['date'] as String).split('T')[0];
       final status = row['status'] as String;
 
       workerNames[workerId] = workerName;
 
       if (!workerAttendance.containsKey(workerId)) {
         workerAttendance[workerId] = {};
-        workerTotalPresent[workerId] = 0;
+        workerTotalPresentInView[workerId] = 0;
       }
 
       workerAttendance[workerId]![dateStr] = status;
       if (status == 'full_day') {
-        workerTotalPresent[workerId] = (workerTotalPresent[workerId] ?? 0) + 1;
+        workerTotalPresentInView[workerId] = (workerTotalPresentInView[workerId] ?? 0) + 1.0;
+      } else if (status == 'half_day') {
+        workerTotalPresentInView[workerId] = (workerTotalPresentInView[workerId] ?? 0) + 0.5;
       }
-      // Half day logic could be +0.5 if required
     }
 
-    // Generate list of days in range
+    // Days in range
     final daysCount = range.end.difference(range.start).inDays + 1;
     final days = List.generate(
         daysCount, (index) => range.start.add(Duration(days: index)));
 
-    // For large ranges (Monthly/Yearly), we might need to handle horizontal scrolling better
-    // But for now, we'll try to fit or let it overflow if using scroll view?
-    // Using SingleChildScrollView horizontally for the matrix part if needed.
+    // Calculate Footer Stats
+    final totalActiveWorkers = workerNames.length;
+    double totalPresenceInView = 0;
+    for(var p in workerTotalPresentInView.values) {
+       totalPresenceInView += p;
+    }
+    
+    // Avg Attendance = (Total Present / (Workers * Days)) * 100
+    // Avoid division by zero
+    final double avgAttendance = (totalActiveWorkers > 0 && daysCount > 0)
+        ? (totalPresenceInView / (totalActiveWorkers * daysCount)) * 100
+        : 0.0;
+
 
     return Column(
       children: [
-        // Header Row - Wrapped in ScrollView sync? simpler to just make the whole table scrollable horizontally
-        // But headers need to stay fixed if optimizing. For simplicity now given requirements:
-        // We will make the central part scrollable horizontally.
-
         Expanded(
           child: Scrollbar(
             thumbVisibility: true,
@@ -381,14 +415,13 @@ class AttendanceReportTab extends ConsumerWidget {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: SizedBox(
-                width: 280.0 +
-                    (days.length *
-                        60.0), // Fixed width: 200(Name) + 80(Total) + days*60
+                // Width = Name(200) + Days(60*N) + Total(60) + Percent(60) + 30Days(80)
+                width: 200.0 + (days.length * 60.0) + 60.0 + 60.0 + 80.0,
                 child: Column(
                   children: [
+                    // Header
                     Container(
                       height: 50,
-                      padding: const EdgeInsets.symmetric(horizontal: 0),
                       decoration: BoxDecoration(
                         border: Border(
                             bottom: BorderSide(
@@ -426,16 +459,32 @@ class AttendanceReportTab extends ConsumerWidget {
                                   ),
                                 ),
                               )),
-                          const SizedBox(
-                              width: 80,
+                           const SizedBox(
+                              width: 60,
                               child: Center(
                                   child: Text('TOTAL',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold)))),
+                           const SizedBox(
+                              width: 60,
+                              child: Center(
+                                  child: Text('%',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold)))),
+                           const SizedBox(
+                              width: 80,
+                              child: Center(
+                                  child: Text('30 DAYS',
                                       style: TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold)))),
                         ],
                       ),
                     ),
+                    
+                    // Body
                     Expanded(
                       child: ListView.builder(
                         itemCount: workerNames.length,
@@ -443,7 +492,15 @@ class AttendanceReportTab extends ConsumerWidget {
                           final workerId = workerNames.keys.elementAt(index);
                           final name = workerNames[workerId]!;
                           final attendance = workerAttendance[workerId] ?? {};
-                          final total = workerTotalPresent[workerId] ?? 0;
+                          final totalInView = workerTotalPresentInView[workerId] ?? 0;
+                          
+                          // Calculate % for view
+                          final viewPercent = (daysCount > 0) 
+                              ? (totalInView / daysCount) * 100 
+                              : 0.0;
+
+                          // Recent 30 days
+                          final recentTotal = recentStats[workerId] ?? 0;
 
                           return Container(
                             height: 50,
@@ -496,12 +553,42 @@ class AttendanceReportTab extends ConsumerWidget {
                                             _buildStatusBadge(context, status)),
                                   );
                                 }),
+                                
+                                // Total Column
+                                SizedBox(
+                                  width: 60,
+                                  child: Center(
+                                    child: Text(
+                                      totalInView % 1 == 0 ? totalInView.toInt().toString() : totalInView.toString(), // Show decimal if half day
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13),
+                                    ),
+                                  ),
+                                ),
+
+                                // % Column
+                                SizedBox(
+                                  width: 60,
+                                  child: Center(
+                                    child: Text(
+                                      '${viewPercent.toStringAsFixed(0)}%',
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: viewPercent < 50 ? AppColors.error : AppColors.success
+                                      ),
+                                    ),
+                                  ),
+                                ),
+
+                                // 30 Days Column
                                 SizedBox(
                                   width: 80,
                                   child: Center(
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 12, vertical: 4),
+                                          horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
                                         color: Theme.of(context)
                                             .dividerColor
@@ -509,10 +596,10 @@ class AttendanceReportTab extends ConsumerWidget {
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Text(
-                                        '$total',
+                                        '${recentTotal % 1 == 0 ? recentTotal.toInt() : recentTotal}/30',
                                         style: const TextStyle(
                                             fontWeight: FontWeight.bold,
-                                            fontSize: 13),
+                                            fontSize: 12),
                                       ),
                                     ),
                                   ),
@@ -530,7 +617,7 @@ class AttendanceReportTab extends ConsumerWidget {
           ),
         ),
 
-        // Footer (Active Workers count) - No Navigation
+        // Footer (Active Workers count) - Calculated dynamically
         Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
@@ -553,7 +640,7 @@ class AttendanceReportTab extends ConsumerWidget {
                               ?.color
                               ?.withOpacity(0.7))),
                   const SizedBox(height: 4),
-                  Text('${workerNames.length}',
+                  Text('$totalActiveWorkers',
                       style: const TextStyle(
                           fontSize: 20, fontWeight: FontWeight.bold)),
                 ],
@@ -572,11 +659,11 @@ class AttendanceReportTab extends ConsumerWidget {
                               ?.color
                               ?.withOpacity(0.7))),
                   const SizedBox(height: 4),
-                  const Text('92.4%',
+                  Text('${avgAttendance.toStringAsFixed(1)}%',
                       style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.success)),
+                          color: avgAttendance > 75 ? AppColors.success : (avgAttendance > 40 ? AppColors.warning : AppColors.error))),
                 ],
               ),
             ],
@@ -609,7 +696,12 @@ class AttendanceReportTab extends ConsumerWidget {
       bgColor = AppColors.warning.withOpacity(0.1);
       textColor = AppColors.warning;
       text = 'H';
+    } else if (status == 'absent') {
+       bgColor = AppColors.error.withOpacity(0.1);
+       textColor = AppColors.error;
+       text = 'A';
     } else {
+      // Default / fallback
       bgColor = AppColors.error.withOpacity(0.1);
       textColor = AppColors.error;
       text = 'A';
@@ -634,3 +726,4 @@ class AttendanceReportTab extends ConsumerWidget {
     );
   }
 }
+
