@@ -100,6 +100,15 @@ class _DatabaseSelectionScreenState extends ConsumerState<DatabaseSelectionScree
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // Logo/Title
+                  Center(
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      height: 80,
+                      width: 80,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   Text(
                     'Production Dashboard',
                     style: Theme.of(context).textTheme.displayMedium,

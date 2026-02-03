@@ -101,6 +101,9 @@ class _LogisticsScreenState extends ConsumerState<LogisticsScreen> {
     } else if (config.scope == ExportScope.month) {
       start = config.date!;
       end = DateTime(start.year, start.month + 1, 0);
+    } else if (config.scope == ExportScope.yearly) {
+      start = DateTime(config.date!.year, 1, 1);
+      end = DateTime(config.date!.year, 12, 31);
     } else {
       start = config.customRange!.start;
       end = config.customRange!.end;

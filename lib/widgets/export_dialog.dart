@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 enum ExportFormat { excel, pdf }
-enum ExportScope { day, week, month }
+enum ExportScope { day, week, month, yearly }
 
 class ExportConfig {
   final ExportFormat format;
@@ -81,6 +81,8 @@ class _ExportDialogState extends State<ExportDialog> {
                    _buildScopeChip(ExportScope.week, 'Weekly'),
                    const SizedBox(width: 8),
                    _buildScopeChip(ExportScope.month, 'Monthly'),
+   const SizedBox(width: 8),
+   _buildScopeChip(ExportScope.yearly, 'Yearly'),
                 ],
               ),
               const SizedBox(height: 16),
@@ -198,6 +200,8 @@ class _ExportDialogState extends State<ExportDialog> {
   String _getFormattedDate() {
     if (_selectedScope == ExportScope.month) {
       return DateFormat('MMMM yyyy').format(_selectedDate);
+    } else if (_selectedScope == ExportScope.yearly) {
+      return DateFormat('yyyy').format(_selectedDate);
     } else if (_selectedScope == ExportScope.week) {
         // Find start and end of week
         final start = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));

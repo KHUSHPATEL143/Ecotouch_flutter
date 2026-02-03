@@ -133,7 +133,12 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                     color: AppColors.primaryBlue.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.eco, color: AppColors.primaryBlue, size: 24),
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    width: 32,
+                    height: 32,
+                    fit: BoxFit.contain,
+                  ),
                 ),
                 if (!_isSidebarCollapsed) ...[
                   const SizedBox(width: 12),

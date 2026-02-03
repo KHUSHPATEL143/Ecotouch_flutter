@@ -282,6 +282,9 @@ class _AttendanceReportTabState extends ConsumerState<AttendanceReportTab> {
     } else if (config.scope == ExportScope.month) {
       start = config.date!;
       end = DateTime(start.year, start.month + 1, 0);
+    } else if (config.scope == ExportScope.yearly) {
+      start = DateTime(config.date!.year, 1, 1);
+      end = DateTime(config.date!.year, 12, 31);
     } else if (config.scope == ExportScope.week) {
       start = app_date_utils.DateUtils.getStartOfWeek(config.date!);
       end = app_date_utils.DateUtils.getEndOfWeek(config.date!);
@@ -296,7 +299,8 @@ class _AttendanceReportTabState extends ConsumerState<AttendanceReportTab> {
         SELECT 
           a.date,
           w.name as worker_name,
-          a.status
+          a.status,
+          a.time_in
         FROM attendance a
         JOIN workers w ON a.worker_id = w.id
         WHERE a.date BETWEEN ? AND ?
@@ -316,12 +320,14 @@ class _AttendanceReportTabState extends ConsumerState<AttendanceReportTab> {
       
        final Set<String> workerNames = {};
       final Set<String> dates = {};
+      // Map<Date, Map<WorkerName, Status|TimeIn>>
       final Map<String, Map<String, String>> matrix = {};
 
       for (var row in records) {
         final date = (row['date'] as String).split('T')[0];
         final worker = row['worker_name'] as String;
         final status = row['status'] as String;
+        final timeIn = row['time_in'] as String?;
 
         workerNames.add(worker);
         dates.add(date);
@@ -329,7 +335,8 @@ class _AttendanceReportTabState extends ConsumerState<AttendanceReportTab> {
         if (!matrix.containsKey(date)) {
           matrix[date] = {};
         }
-        matrix[date]![worker] = status;
+        // Store combine status and time
+        matrix[date]![worker] = '$status|${timeIn ?? ''}';
       }
 
       final sortedDates = dates.toList()..sort();
@@ -342,34 +349,87 @@ class _AttendanceReportTabState extends ConsumerState<AttendanceReportTab> {
       ];
 
       final List<List<dynamic>> rows = [];
+      
+      // Track totals per worker for the summary row
+      // Map<Worker, Map<Status, Count>>
+      final Map<String, Map<String, int>> workerTotals = {};
+      for(var w in sortedWorkers) {
+        workerTotals[w] = {'full_day': 0, 'half_day': 0};
+      }
 
       for (var date in sortedDates) {
         final List<dynamic> row = [];
         row.add(app_date_utils.DateUtils.formatDate(
             DateTime.parse(date))); 
 
-        int presentCount = 0;
-        int halfDayCount = 0;
+        int rowPresentCount = 0;
+        int rowHalfDayCount = 0;
 
         for (var worker in sortedWorkers) {
-          final status = matrix[date]?[worker];
-          if (status == 'full_day') {
-            row.add('Present');
-            presentCount++;
-          } else if (status == 'half_day') {
-            row.add('Half Day');
-            halfDayCount++;
+          final entry = matrix[date]?[worker];
+          
+          if (entry != null) {
+            final parts = entry.split('|');
+            final status = parts[0];
+            final timeIn = parts.length > 1 ? parts[1] : '';
+            
+            String cellText = '';
+            
+            if (status == 'full_day') {
+              cellText = 'Present';
+              rowPresentCount++;
+              workerTotals[worker]!['full_day'] = workerTotals[worker]!['full_day']! + 1;
+            } else if (status == 'half_day') {
+              cellText = 'Half Day';
+              rowHalfDayCount++;
+              workerTotals[worker]!['half_day'] = workerTotals[worker]!['half_day']! + 1;
+            } else {
+              cellText = '-'; 
+            }
+            
+            if (timeIn.isNotEmpty && cellText != '-') {
+              cellText += '\n($timeIn)';
+            }
+            
+            row.add(cellText);
           } else {
-            row.add('-'); 
+            row.add('-');
           }
         }
+        
         final List<String> summaryParts = [];
-        if (presentCount > 0) summaryParts.add('Present:$presentCount');
-        if (halfDayCount > 0) summaryParts.add('Half Day:$halfDayCount');
+        if (rowPresentCount > 0) summaryParts.add('Present:$rowPresentCount');
+        if (rowHalfDayCount > 0) summaryParts.add('Half Day:$rowHalfDayCount');
         row.add(summaryParts.isEmpty ? '-' : summaryParts.join(' '));
 
         rows.add(row);
       }
+      
+      // Add Summary Row
+      final List<dynamic> summaryRow = ['TOTALS'];
+      int totalPeriodPresent = 0;
+      int totalPeriodHalfDay = 0;
+
+      for (var worker in sortedWorkers) {
+        final p = workerTotals[worker]!['full_day']!;
+        final h = workerTotals[worker]!['half_day']!;
+        totalPeriodPresent += p;
+        totalPeriodHalfDay += h;
+        
+        final List<String> parts = [];
+        if (p > 0) parts.add('P: $p');
+        if (h > 0) parts.add('H: $h');
+        
+        summaryRow.add(parts.isEmpty ? '-' : parts.join('\n'));
+      }
+      
+      // Grand Total Cell
+      final List<String> grandTotalParts = [];
+      if (totalPeriodPresent > 0) grandTotalParts.add('P: $totalPeriodPresent');
+      if (totalPeriodHalfDay > 0) grandTotalParts.add('H: $totalPeriodHalfDay');
+      summaryRow.add(grandTotalParts.isEmpty ? '-' : grandTotalParts.join('\n'));
+      
+      rows.add(summaryRow);
       
        final title =
           'Attendance Matrix (${app_date_utils.DateUtils.formatDate(start)} - ${app_date_utils.DateUtils.formatDate(end)})';
@@ -409,6 +469,7 @@ class _AttendanceReportTabState extends ConsumerState<AttendanceReportTab> {
     // Process Data
     final Map<int, Map<String, String>> workerAttendance = {};
     final Map<int, String> workerNames = {};
+    final Map<int, int> workerMarkedDays = {}; 
     final Map<int, double> workerTotalPresentInView = {}; 
 
     for (var row in rawData) {
@@ -422,13 +483,16 @@ class _AttendanceReportTabState extends ConsumerState<AttendanceReportTab> {
       if (!workerAttendance.containsKey(workerId)) {
         workerAttendance[workerId] = {};
         workerTotalPresentInView[workerId] = 0;
+        workerMarkedDays[workerId] = 0;
       }
 
       workerAttendance[workerId]![dateStr] = status;
+      workerMarkedDays[workerId] = (workerMarkedDays[workerId] ?? 0) + 1;
+
       if (status == 'full_day') {
         workerTotalPresentInView[workerId] = (workerTotalPresentInView[workerId] ?? 0) + 1.0;
       } else if (status == 'half_day') {
-        workerTotalPresentInView[workerId] = (workerTotalPresentInView[workerId] ?? 0) + 0.5;
+        workerTotalPresentInView[workerId] = (workerTotalPresentInView[workerId] ?? 0) + 1.0;
       }
     }
 
@@ -440,12 +504,15 @@ class _AttendanceReportTabState extends ConsumerState<AttendanceReportTab> {
     // Calculate Footer Stats
     final totalActiveWorkers = workerNames.length;
     double totalPresenceInView = 0;
-    for(var p in workerTotalPresentInView.values) {
-       totalPresenceInView += p;
+    int totalMarkedDaysInView = 0;
+
+    for(var id in workerNames.keys) {
+       totalPresenceInView += (workerTotalPresentInView[id] ?? 0);
+       totalMarkedDaysInView += (workerMarkedDays[id] ?? 0);
     }
     
-    final double avgAttendance = (totalActiveWorkers > 0 && daysCount > 0)
-        ? (totalPresenceInView / (totalActiveWorkers * daysCount)) * 100
+    final double avgAttendance = (totalActiveWorkers > 0 && totalMarkedDaysInView > 0)
+        ? (totalPresenceInView / totalMarkedDaysInView) * 100
         : 0.0;
 
     // Dimensions
@@ -614,7 +681,8 @@ class _AttendanceReportTabState extends ConsumerState<AttendanceReportTab> {
                         itemBuilder: (context, index) {
                           final workerId = sortedWorkerIds[index];
                           final totalInView = workerTotalPresentInView[workerId] ?? 0;
-                          final viewPercent = (daysCount > 0) ? (totalInView / daysCount) * 100 : 0.0;
+                          final markedDays = workerMarkedDays[workerId] ?? 0;
+                          final viewPercent = (markedDays > 0) ? (totalInView / markedDays) * 100 : 0.0;
                           final recentTotal = recentStats[workerId] ?? 0;
                           
                           return Container(

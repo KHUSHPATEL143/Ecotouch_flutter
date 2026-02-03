@@ -105,7 +105,7 @@ final dashboardStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async 
   
   // Get attendance count for selected date
   final attendance = await AttendanceRepository.getByDate(selectedDate);
-  final workersPresent = attendance.length;
+  final workersPresent = attendance.where((a) => a.status != AttendanceStatus.absent).length;
   
   // Get production count for selected date
   final dailyProduction = await ProductionRepository.getByDate(selectedDate);
