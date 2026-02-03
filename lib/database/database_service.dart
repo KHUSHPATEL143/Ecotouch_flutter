@@ -38,15 +38,33 @@ class DatabaseService {
       );
 
       _currentDatabasePath = databasePath;
+      
+      // Run integrity check on startup
+      await _checkIntegrity();
+      
+      // Run incremental vacuum to optimize database
+      await _optimizeDatabase();
+      
+      print('Database initialized successfully at: $databasePath');
       return _database!;
     } catch (e) {
       throw Exception('Failed to initialize database: $e');
     }
   }
 
-  /// Configure database (enable foreign keys)
+  /// Configure database (enable foreign keys and WAL mode)
   static Future<void> _onConfigure(Database db) async {
     await db.execute('PRAGMA foreign_keys = ON');
+    
+    // Enable WAL (Write-Ahead Logging) mode for better concurrency
+    // WAL allows readers and writers to work simultaneously
+    await db.execute('PRAGMA journal_mode = WAL');
+    
+    // Set synchronous mode to NORMAL for better performance with WAL
+    await db.execute('PRAGMA synchronous = NORMAL');
+    
+    // Enable auto-vacuum to prevent database bloat
+    await db.execute('PRAGMA auto_vacuum = INCREMENTAL');
   }
 
   /// Create database schema
@@ -651,12 +669,26 @@ class DatabaseService {
   /// Get current database path
   static String? get currentDatabasePath => _currentDatabasePath;
 
-  /// Close database connection
-  static Future<void> closeDatabase() async {
+  /// Close database connection with auto-backup
+  static Future<void> closeDatabase({bool autoBackup = true}) async {
     if (_database != null) {
-      await _database!.close();
-      _database = null;
-      _currentDatabasePath = null;
+      try {
+        // Auto-backup before closing if enabled and path is set
+        if (autoBackup && _currentDatabasePath != null) {
+          await _autoBackup();
+        }
+        
+        await _database!.close();
+        _database = null;
+        _currentDatabasePath = null;
+        print('Database closed successfully');
+      } catch (e) {
+        print('Error during database close: $e');
+        // Ensure database is closed even if backup fails
+        await _database!.close();
+        _database = null;
+        _currentDatabasePath = null;
+      }
     }
   }
 
@@ -794,6 +826,134 @@ class DatabaseService {
       // Reopen database even if restore failed to prevent app crash
       await initDatabase(targetPath);
       throw Exception('Failed to restore database: $e');
+    }
+  }
+
+  /// Check database integrity
+  static Future<bool> _checkIntegrity() async {
+    try {
+      final db = await database;
+      final result = await db.rawQuery('PRAGMA integrity_check');
+      
+      if (result.isNotEmpty && result.first.values.first == 'ok') {
+        print('✓ Database integrity check passed');
+        return true;
+      } else {
+        print('⚠ Database integrity check failed: $result');
+        return false;
+      }
+    } catch (e) {
+      print('Error during integrity check: $e');
+      return false;
+    }
+  }
+
+  /// Optimize database using incremental vacuum
+  static Future<void> _optimizeDatabase() async {
+    try {
+      final db = await database;
+      
+      // Get database size before optimization
+      final sizeResult = await db.rawQuery('PRAGMA page_count');
+      final pageCount = sizeResult.first['page_count'] as int;
+      
+      // Run incremental vacuum (reclaim up to 100 pages)
+      await db.execute('PRAGMA incremental_vacuum(100)');
+      
+      // Get size after
+      final newSizeResult = await db.rawQuery('PRAGMA page_count');
+      final newPageCount = newSizeResult.first['page_count'] as int;
+      
+      final pagesReclaimed = pageCount - newPageCount;
+      if (pagesReclaimed > 0) {
+        print('✓ Database optimized: $pagesReclaimed pages reclaimed');
+      }
+    } catch (e) {
+      print('Error during database optimization: $e');
+    }
+  }
+
+  /// Auto-backup database to backups directory
+  static Future<void> _autoBackup() async {
+    try {
+      if (_currentDatabasePath == null) return;
+      
+      final dbFile = File(_currentDatabasePath!);
+      final dbDir = dbFile.parent;
+      final backupDir = Directory(path.join(dbDir.path, 'backups'));
+      
+      // Create backups directory if it doesn't exist
+      if (!await backupDir.exists()) {
+        await backupDir.create(recursive: true);
+      }
+      
+      // Create backup filename with timestamp
+      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.')[0];
+      final backupPath = path.join(backupDir.path, 'auto_backup_$timestamp.db');
+      
+      // Keep only last 5 auto-backups
+      final backups = await backupDir.list().where((f) => f.path.contains('auto_backup')).toList();
+      if (backups.length >= 5) {
+        // Sort by modification time and delete oldest
+        backups.sort((a, b) => File(a.path).lastModifiedSync().compareTo(File(b.path).lastModifiedSync()));
+        for (var i = 0; i < backups.length - 4; i++) {
+          await backups[i].delete();
+        }
+      }
+      
+      // Copy database file
+      await dbFile.copy(backupPath);
+      print('✓ Auto-backup created: $backupPath');
+    } catch (e) {
+      print('Error during auto-backup: $e');
+      // Don't throw - backup failure shouldn't prevent app from closing
+    }
+  }
+
+  /// Get database health metrics
+  static Future<Map<String, dynamic>> getDatabaseHealth() async {
+    try {
+      final db = await database;
+      
+      // Get various database statistics
+      final pageCount = await db.rawQuery('PRAGMA page_count');
+      final pageSize = await db.rawQuery('PRAGMA page_size');
+      final freePages = await db.rawQuery('PRAGMA freelist_count');
+      final journalMode = await db.rawQuery('PRAGMA journal_mode');
+      
+      final totalPages = pageCount.first['page_count'] as int;
+      final pageSizeBytes = pageSize.first['page_size'] as int;
+      final freePagesCount = freePages.first['freelist_count'] as int;
+      
+      final totalSizeBytes = totalPages * pageSizeBytes;
+      final freeSizeBytes = freePagesCount * pageSizeBytes;
+      final usedSizeBytes = totalSizeBytes - freeSizeBytes;
+      
+      return {
+        'totalSizeMB': (totalSizeBytes / (1024 * 1024)).toStringAsFixed(2),
+        'usedSizeMB': (usedSizeBytes / (1024 * 1024)).toStringAsFixed(2),
+        'freeSizeMB': (freeSizeBytes / (1024 * 1024)).toStringAsFixed(2),
+        'journalMode': journalMode.first['journal_mode'],
+        'pageCount': totalPages,
+        'freePages': freePagesCount,
+        'fragmentationPercent': ((freePagesCount / totalPages) * 100).toStringAsFixed(1),
+      };
+    } catch (e) {
+      print('Error getting database health: $e');
+      return {};
+    }
+  }
+
+  /// Manual vacuum (full optimization)
+  static Future<void> vacuumDatabase() async {
+    try {
+      final db = await database;
+      print('Running full database vacuum...');
+      await db.execute('VACUUM');
+      print('✓ Database vacuum completed');
+    } catch (e) {
+      print('Error during vacuum: $e');
+      throw Exception('Failed to vacuum database: $e');
     }
   }
 }

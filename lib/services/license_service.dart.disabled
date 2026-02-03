@@ -1,0 +1,494 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:async';
+import 'hardware_fingerprint_service.dart';
+import 'secure_storage_service.dart';
+
+/// License validation service with Firebase integration
+/// Handles activation, validation, and concurrent session management
+class LicenseService {
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static Timer? _heartbeatTimer;
+  static String? _currentSessionId;
+  static bool _isOnline = false;
+
+  // Constants
+  static const int maxActivations = 4;
+  static const int maxConcurrent = 1;
+  static const Duration heartbeatInterval = Duration(minutes: 2);
+  static const Duration sessionTimeout = Duration(minutes: 5);
+  static const Duration gracePeriodDays = Duration(days: 4);
+
+  /// Check if device is online
+  static Future<bool> checkConnectivity() async {
+    try {
+      final connectivityResult = await Connectivity().checkConnectivity();
+      _isOnline = connectivityResult.first != ConnectivityResult.none;
+      return _isOnline;
+    } catch (e) {
+      _isOnline = false;
+      return false;
+    }
+  }
+
+  /// Validate license key format (ECOT-XXXX-XXXX-XXXX)
+  static bool isValidLicenseFormat(String licenseKey) {
+    final regex = RegExp(r'^ECOT-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$');
+    return regex.hasMatch(licenseKey.toUpperCase());
+  }
+
+  /// Activate license on this device
+  static Future<Map<String, dynamic>> activateLicense(String licenseKey) async {
+    try {
+      // Validate format
+      if (!isValidLicenseFormat(licenseKey)) {
+        return {
+          'success': false,
+          'error': 'Invalid license key format. Expected: ECOT-XXXX-XXXX-XXXX',
+        };
+      }
+
+      // Check connectivity
+      final online = await checkConnectivity();
+      if (!online) {
+        return {
+          'success': false,
+          'error': 'No internet connection. Please connect to the internet to activate your license.',
+        };
+      }
+
+      // Get hardware fingerprint
+      final fingerprint = await HardwareFingerprintService.generateFingerprint();
+      final deviceInfo = await HardwareFingerprintService.getDeviceInfo();
+      final deviceName = await HardwareFingerprintService.getDeviceName();
+
+      // Check if license exists in Firebase
+      final licenseDoc = await _firestore
+          .collection('licenses')
+          .doc(licenseKey.toUpperCase())
+          .get();
+
+      if (!licenseDoc.exists) {
+        return {
+          'success': false,
+          'error': 'License key not found. Please contact support.',
+        };
+      }
+
+      final licenseData = licenseDoc.data()!;
+
+      // Check if license is active
+      if (licenseData['isActive'] != true) {
+        return {
+          'success': false,
+          'error': 'This license has been deactivated. Please contact support.',
+        };
+      }
+
+      // Check expiration
+      final expiresAt = licenseData['expiresAt'] as Timestamp?;
+      if (expiresAt != null && expiresAt.toDate().isBefore(DateTime.now())) {
+        return {
+          'success': false,
+          'error': 'This license has expired. Please renew your subscription.',
+        };
+      }
+
+      // Check activation count
+      final activationsSnapshot = await _firestore
+          .collection('licenses')
+          .doc(licenseKey.toUpperCase())
+          .collection('activations')
+          .get();
+
+      // Check if this device is already activated
+      String? existingDeviceId;
+      for (var doc in activationsSnapshot.docs) {
+        if (doc.data()['hardwareFingerprint'] == fingerprint) {
+          existingDeviceId = doc.id;
+          break;
+        }
+      }
+
+      if (existingDeviceId == null) {
+        // New device activation
+        if (activationsSnapshot.docs.length >= maxActivations) {
+          return {
+            'success': false,
+            'error': 'Maximum devices reached ($maxActivations). Please deactivate a device first.',
+          };
+        }
+
+        // Create new activation
+        final deviceId = DateTime.now().millisecondsSinceEpoch.toString();
+        await _firestore
+            .collection('licenses')
+            .doc(licenseKey.toUpperCase())
+            .collection('activations')
+            .doc(deviceId)
+            .set({
+          'hardwareFingerprint': fingerprint,
+          'deviceName': deviceName,
+          'activatedAt': FieldValue.serverTimestamp(),
+          'lastValidated': FieldValue.serverTimestamp(),
+          'deviceInfo': deviceInfo,
+        });
+
+        existingDeviceId = deviceId;
+      } else {
+        // Update existing activation
+        await _firestore
+            .collection('licenses')
+            .doc(licenseKey.toUpperCase())
+            .collection('activations')
+            .doc(existingDeviceId)
+            .update({
+          'lastValidated': FieldValue.serverTimestamp(),
+          'deviceInfo': deviceInfo,
+        });
+      }
+
+      // Store license locally
+      await SecureStorageService.storeLicenseKey(licenseKey.toUpperCase());
+      await SecureStorageService.storeHardwareFingerprint(fingerprint);
+      await SecureStorageService.storeDeviceId(existingDeviceId);
+      await SecureStorageService.storeLastValidation(DateTime.now());
+
+      return {
+        'success': true,
+        'message': 'License activated successfully!',
+        'deviceId': existingDeviceId,
+      };
+    } catch (e) {
+      print('Error activating license: $e');
+      return {
+        'success': false,
+        'error': 'Activation failed: ${e.toString()}',
+      };
+    }
+  }
+
+  /// Validate license (check expiration, activation, concurrent usage)
+  static Future<Map<String, dynamic>> validateLicense() async {
+    try {
+      // Check if license is stored locally
+      final licenseKey = await SecureStorageService.getLicenseKey();
+      if (licenseKey == null) {
+        return {
+          'success': false,
+          'error': 'No license found. Please activate a license.',
+          'requiresActivation': true,
+        };
+      }
+
+      // Check connectivity
+      final online = await checkConnectivity();
+
+      if (online) {
+        // Online validation
+        return await _validateOnline(licenseKey);
+      } else {
+        // Offline validation (grace period)
+        return await _validateOffline();
+      }
+    } catch (e) {
+      print('Error validating license: $e');
+      return {
+        'success': false,
+        'error': 'Validation failed: ${e.toString()}',
+      };
+    }
+  }
+
+  /// Online validation with concurrent session check
+  static Future<Map<String, dynamic>> _validateOnline(String licenseKey) async {
+    try {
+      final fingerprint = await HardwareFingerprintService.generateFingerprint();
+      final deviceId = await SecureStorageService.getDeviceId();
+
+      if (deviceId == null) {
+        return {
+          'success': false,
+          'error': 'Device not activated. Please activate your license.',
+          'requiresActivation': true,
+        };
+      }
+
+      // Check license in Firebase
+      final licenseDoc = await _firestore
+          .collection('licenses')
+          .doc(licenseKey)
+          .get();
+
+      if (!licenseDoc.exists) {
+        await SecureStorageService.clearLicenseData();
+        return {
+          'success': false,
+          'error': 'License not found. Please contact support.',
+          'requiresActivation': true,
+        };
+      }
+
+      final licenseData = licenseDoc.data()!;
+
+      // Check if active
+      if (licenseData['isActive'] != true) {
+        await SecureStorageService.clearLicenseData();
+        return {
+          'success': false,
+          'error': 'License has been deactivated. Please contact support.',
+          'requiresActivation': true,
+        };
+      }
+
+      // Check expiration
+      final expiresAt = licenseData['expiresAt'] as Timestamp?;
+      if (expiresAt != null && expiresAt.toDate().isBefore(DateTime.now())) {
+        return {
+          'success': false,
+          'error': 'License has expired. Please renew your subscription.',
+          'requiresActivation': true,
+        };
+      }
+
+      // Verify hardware fingerprint
+      final activationDoc = await _firestore
+          .collection('licenses')
+          .doc(licenseKey)
+          .collection('activations')
+          .doc(deviceId)
+          .get();
+
+      if (!activationDoc.exists) {
+        await SecureStorageService.clearLicenseData();
+        return {
+          'success': false,
+          'error': 'Device activation not found. Please reactivate.',
+          'requiresActivation': true,
+        };
+      }
+
+      final storedFingerprint = activationDoc.data()!['hardwareFingerprint'];
+      if (storedFingerprint != fingerprint) {
+        // Hardware changed - allow flexible reactivation
+        print('Hardware changed, updating fingerprint...');
+        await _firestore
+            .collection('licenses')
+            .doc(licenseKey)
+            .collection('activations')
+            .doc(deviceId)
+            .update({
+          'hardwareFingerprint': fingerprint,
+          'lastValidated': FieldValue.serverTimestamp(),
+        });
+      }
+
+      // Check concurrent sessions
+      final sessionsSnapshot = await _firestore
+          .collection('licenses')
+          .doc(licenseKey)
+          .collection('sessions')
+          .where('isActive', isEqualTo: true)
+          .get();
+
+      // Clean up expired sessions
+      final now = DateTime.now();
+      for (var session in sessionsSnapshot.docs) {
+        final lastHeartbeat = (session.data()['lastHeartbeat'] as Timestamp).toDate();
+        if (now.difference(lastHeartbeat) > sessionTimeout) {
+          await session.reference.update({'isActive': false});
+        }
+      }
+
+      // Re-check active sessions after cleanup
+      final activeSessionsSnapshot = await _firestore
+          .collection('licenses')
+          .doc(licenseKey)
+          .collection('sessions')
+          .where('isActive', isEqualTo: true)
+          .get();
+
+      // Check if another device is using the license
+      final activeSessions = activeSessionsSnapshot.docs
+          .where((doc) => doc.data()['deviceId'] != deviceId)
+          .toList();
+
+      if (activeSessions.isNotEmpty) {
+        return {
+          'success': false,
+          'error': 'Another device is currently using this license. Please close the application on the other device.',
+          'concurrentUsage': true,
+        };
+      }
+
+      // Update last validation
+      await SecureStorageService.storeLastValidation(DateTime.now());
+
+      return {
+        'success': true,
+        'message': 'License validated successfully',
+        'online': true,
+      };
+    } catch (e) {
+      print('Error in online validation: $e');
+      return {
+        'success': false,
+        'error': 'Online validation failed: ${e.toString()}',
+      };
+    }
+  }
+
+  /// Offline validation (grace period check)
+  static Future<Map<String, dynamic>> _validateOffline() async {
+    final withinGracePeriod = await SecureStorageService.isWithinGracePeriod();
+    final remainingHours = await SecureStorageService.getRemainingGraceHours();
+
+    if (!withinGracePeriod) {
+      return {
+        'success': false,
+        'error': 'Offline grace period expired. Please connect to the internet to validate your license.',
+        'gracePeriodExpired': true,
+      };
+    }
+
+    return {
+      'success': true,
+      'message': 'Running in offline mode',
+      'online': false,
+      'gracePeriodHours': remainingHours,
+      'warning': remainingHours < 24
+          ? 'Grace period expires in $remainingHours hours. Please connect to the internet.'
+          : null,
+    };
+  }
+
+  /// Create session in Firebase
+  static Future<bool> createSession() async {
+    try {
+      final licenseKey = await SecureStorageService.getLicenseKey();
+      final deviceId = await SecureStorageService.getDeviceId();
+
+      if (licenseKey == null || deviceId == null) return false;
+
+      final sessionId = DateTime.now().millisecondsSinceEpoch.toString();
+      
+      await _firestore
+          .collection('licenses')
+          .doc(licenseKey)
+          .collection('sessions')
+          .doc(sessionId)
+          .set({
+        'deviceId': deviceId,
+        'startedAt': FieldValue.serverTimestamp(),
+        'lastHeartbeat': FieldValue.serverTimestamp(),
+        'isActive': true,
+      });
+
+      _currentSessionId = sessionId;
+      _startHeartbeat();
+
+      print('✓ Session created: $sessionId');
+      return true;
+    } catch (e) {
+      print('Error creating session: $e');
+      return false;
+    }
+  }
+
+  /// Start heartbeat timer
+  static void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(heartbeatInterval, (_) => _sendHeartbeat());
+  }
+
+  /// Send heartbeat to Firebase
+  static Future<void> _sendHeartbeat() async {
+    try {
+      if (_currentSessionId == null) return;
+
+      final licenseKey = await SecureStorageService.getLicenseKey();
+      if (licenseKey == null) return;
+
+      final online = await checkConnectivity();
+      if (!online) return;
+
+      await _firestore
+          .collection('licenses')
+          .doc(licenseKey)
+          .collection('sessions')
+          .doc(_currentSessionId)
+          .update({
+        'lastHeartbeat': FieldValue.serverTimestamp(),
+      });
+
+      print('♥ Heartbeat sent');
+    } catch (e) {
+      print('Error sending heartbeat: $e');
+    }
+  }
+
+  /// End session
+  static Future<void> endSession() async {
+    try {
+      _heartbeatTimer?.cancel();
+
+      if (_currentSessionId == null) return;
+
+      final licenseKey = await SecureStorageService.getLicenseKey();
+      if (licenseKey == null) return;
+
+      await _firestore
+          .collection('licenses')
+          .doc(licenseKey)
+          .collection('sessions')
+          .doc(_currentSessionId)
+          .update({
+        'isActive': false,
+      });
+
+      print('✓ Session ended: $_currentSessionId');
+      _currentSessionId = null;
+    } catch (e) {
+      print('Error ending session: $e');
+    }
+  }
+
+  /// Deactivate this device
+  static Future<Map<String, dynamic>> deactivateDevice() async {
+    try {
+      final licenseKey = await SecureStorageService.getLicenseKey();
+      final deviceId = await SecureStorageService.getDeviceId();
+
+      if (licenseKey == null || deviceId == null) {
+        return {
+          'success': false,
+          'error': 'No active license found',
+        };
+      }
+
+      // End session
+      await endSession();
+
+      // Delete activation
+      await _firestore
+          .collection('licenses')
+          .doc(licenseKey)
+          .collection('activations')
+          .doc(deviceId)
+          .delete();
+
+      // Clear local data
+      await SecureStorageService.clearLicenseData();
+
+      return {
+        'success': true,
+        'message': 'Device deactivated successfully',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Deactivation failed: ${e.toString()}',
+      };
+    }
+  }
+}

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+// import 'package:firebase_core/firebase_core.dart';
+// import 'firebase_options.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth/database_selection_screen.dart';
 import 'providers/global_providers.dart';
+
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,8 +17,21 @@ void main() async {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
+  // Initialize Firebase - TEMPORARILY DISABLED
+  // try {
+  //   await Firebase.initializeApp(
+  //     options: DefaultFirebaseOptions.currentPlatform,
+  //   );
+  //   print('✓ Firebase initialized successfully');
+  // } catch (e) {
+  //   print('⚠ Firebase initialization failed: $e');
+  //   // Continue anyway - app can work offline
+  // }
+
   // Initialize SharedPreferences
   final prefs = await SharedPreferences.getInstance();
+
+
 
   runApp(
     ProviderScope(

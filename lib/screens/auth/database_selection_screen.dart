@@ -7,6 +7,8 @@ import '../../providers/global_providers.dart';
 import '../../database/database_service.dart';
 import '../../utils/constants.dart';
 import '../../utils/recent_files_service.dart';
+import '../../services/license_service_mock.dart'; // Using mock service
+import '../license/license_activation_screen.dart';
 import '../main/main_layout.dart';
 
 class DatabaseSelectionScreen extends ConsumerStatefulWidget {
@@ -62,12 +64,24 @@ class _DatabaseSelectionScreenState extends ConsumerState<DatabaseSelectionScree
       await DatabaseService.initDatabase(dbPath);
       await RecentFilesService.addRecentFile(dbPath);
       
+      // Validate License
+      final licenseResult = await LicenseService.validateLicense();
+      
       if (mounted) {
         ref.read(databasePathProvider.notifier).state = dbPath;
-        ref.read(isAuthenticatedProvider.notifier).state = true;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MainLayout()),
-        );
+        
+        if (licenseResult['success'] == true) {
+          // License valid - proceed to dashboard
+          ref.read(isAuthenticatedProvider.notifier).state = true;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const MainLayout()),
+          );
+        } else {
+          // License invalid/missing - go to activation
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const LicenseActivationScreen()),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {

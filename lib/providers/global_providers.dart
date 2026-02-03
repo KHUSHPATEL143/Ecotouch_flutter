@@ -13,6 +13,7 @@ import '../database/repositories/worker_repository.dart';
 import '../database/repositories/attendance_repository.dart';
 import '../database/repositories/production_repository.dart';
 import '../services/stock_calculation_service.dart';
+import '../services/database_health_service.dart';
 
 import '../models/attendance.dart';
 import '../models/worker.dart';
@@ -72,7 +73,12 @@ final databaseProvider = Provider<Future<Database>>((ref) async {
   if (dbPath == null) {
     throw Exception('Database path not set');
   }
-  return await DatabaseService.initDatabase(dbPath);
+  final db = await DatabaseService.initDatabase(dbPath);
+  
+  // Start database health monitoring
+  DatabaseHealthService.startMonitoring(intervalMinutes: 30);
+  
+  return db;
 });
 
 /// Provider for recent databases list
@@ -135,4 +141,63 @@ final dashboardStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async 
         .toList(),
     'productionHistory': productionHistory,
   };
+});
+
+/// Export Progress Notifier
+class ExportProgressNotifier extends StateNotifier<Map<String, dynamic>> {
+  ExportProgressNotifier() : super({
+    'isExporting': false,
+    'progress': 0.0,
+    'currentStep': '',
+    'totalRows': 0,
+    'processedRows': 0,
+  });
+
+  void startExport(int totalRows) {
+    state = {
+      'isExporting': true,
+      'progress': 0.0,
+      'currentStep': 'Initializing export...',
+      'totalRows': totalRows,
+      'processedRows': 0,
+    };
+  }
+
+  void updateProgress(int processedRows, String currentStep) {
+    final progress = state['totalRows'] > 0 
+        ? (processedRows / state['totalRows']).clamp(0.0, 1.0)
+        : 0.0;
+    
+    state = {
+      ...state,
+      'progress': progress,
+      'currentStep': currentStep,
+      'processedRows': processedRows,
+    };
+  }
+
+  void completeExport() {
+    state = {
+      'isExporting': false,
+      'progress': 1.0,
+      'currentStep': 'Export completed',
+      'totalRows': state['totalRows'],
+      'processedRows': state['totalRows'],
+    };
+  }
+
+  void cancelExport() {
+    state = {
+      'isExporting': false,
+      'progress': 0.0,
+      'currentStep': 'Export cancelled',
+      'totalRows': 0,
+      'processedRows': 0,
+    };
+  }
+}
+
+/// Global provider for export progress
+final exportProgressProvider = StateNotifierProvider<ExportProgressNotifier, Map<String, dynamic>>((ref) {
+  return ExportProgressNotifier();
 });
