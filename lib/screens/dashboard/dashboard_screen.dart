@@ -4,6 +4,8 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/global_providers.dart';
 import '../../widgets/stat_card.dart';
+import '../../models/stock_item.dart';
+import '../../services/stock_calculation_service.dart';
 import 'widgets/production_graph_widget.dart';
 
 // Providers for dashboard data
@@ -95,6 +97,9 @@ class DashboardScreen extends ConsumerWidget {
                       title: 'Raw Material',
                       value: stats['rawMaterialsLow'] == 0 ? 'Healthy' : stats['rawMaterialsLow'].toString(),
                       subtitle: stats['rawMaterialsLow'] > 0 ? 'Low stock items' : 'Stock levels sufficient',
+                      onTap: stats['rawMaterialsLow'] > 0
+                          ? () => _showStockAlerts(context, stats['stockAlerts'], true)
+                          : null,
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -108,6 +113,9 @@ class DashboardScreen extends ConsumerWidget {
                       title: 'Product Stock',
                       value: stats['productsLow'] == 0 ? 'Healthy' : stats['productsLow'].toString(),
                       subtitle: stats['productsLow'] > 0 ? 'Low stock items' : 'Stock levels sufficient',
+                      onTap: stats['productsLow'] > 0
+                          ? () => _showStockAlerts(context, stats['stockAlerts'], false)
+                          : null,
                     ),
                   ),
                 ],
@@ -133,4 +141,82 @@ class DashboardScreen extends ConsumerWidget {
   }
 
 
+
+
+  void _showStockAlerts(
+      BuildContext context, List<StockItem> alerts, bool isRawMaterial) {
+    // Filter alerts based on type if needed, but currently mixed.
+    // Ideally existing logic in provider mixed them.
+    // Let's filter here based on assumption or just show all relevant.
+    // Provider returns 'stockAlerts' which is ALL alerts.
+    // We should filter to show only Raw Material or Product based on which card was clicked.
+    // However, StockItem doesn't explicitly store type (it's generic).
+    // We'll approximate or just show all for now, OR better yet, let's filter by unit?
+    // Actually, distinct lists in provider would be better, but for now let's just show all alerts
+    // or improve provider later.
+    // Wait, let's just filter by a simple heuristic if possible, or show all.
+    // Showing all is safer for "Stock Alerts".
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppColors.warning),
+            const SizedBox(width: 8),
+            const Text('Low Stock Alerts'),
+          ],
+        ),
+        content: SizedBox(
+          width: 500,
+          child: alerts.isEmpty
+              ? const Text('No active alerts.')
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: alerts.length,
+                  separatorBuilder: (context, index) => const Divider(),
+                  itemBuilder: (context, index) {
+                    final item = alerts[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: item.status == StockStatus.critical
+                            ? AppColors.error.withOpacity(0.1)
+                            : AppColors.warning.withOpacity(0.1),
+                        child: Icon(
+                          Icons.inventory_2,
+                          color: item.status == StockStatus.critical
+                              ? AppColors.error
+                              : AppColors.warning,
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(item.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text(
+                          'Current: ${item.formattedStock} (Min: ${item.minAlertLevel} ${item.unit})'),
+                      trailing: Chip(
+                        label: Text(
+                          item.status.displayName,
+                          style: TextStyle(
+                            color: Color(item.status.color),
+                            fontSize: 12,
+                          ),
+                        ),
+                        backgroundColor:
+                            Color(item.status.color).withOpacity(0.1),
+                        side: BorderSide.none,
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
 }

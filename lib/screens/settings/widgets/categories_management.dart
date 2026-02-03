@@ -559,6 +559,7 @@ class _ProductDialogState extends ConsumerState<_ProductDialog>
   late final TextEditingController _nameController;
   late final TextEditingController _unitController;
   final _initialStockController = TextEditingController();
+  final _minAlertController = TextEditingController();
   late final TabController _tabController;
 
   // Recipe State
@@ -573,6 +574,7 @@ class _ProductDialogState extends ConsumerState<_ProductDialog>
         TextEditingController(text: widget.product?.unit ?? 'pieces');
     _initialStockController.text =
         (widget.product?.initialStock ?? 0).toString();
+    _minAlertController.text = (widget.product?.minAlertLevel ?? 0).toString();
 
     _tabController = TabController(length: 2, vsync: this);
 
@@ -600,6 +602,7 @@ class _ProductDialogState extends ConsumerState<_ProductDialog>
     _nameController.dispose();
     _unitController.dispose();
     _initialStockController.dispose();
+    _minAlertController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -647,6 +650,7 @@ class _ProductDialogState extends ConsumerState<_ProductDialog>
         categoryId: widget.categoryId,
         unit: _unitController.text.trim(),
         initialStock: double.tryParse(_initialStockController.text) ?? 0,
+        minAlertLevel: double.tryParse(_minAlertController.text) ?? 0,
       );
 
       int productId;
@@ -769,9 +773,22 @@ class _ProductDialogState extends ConsumerState<_ProductDialog>
                                         Icon(Icons.inventory_2_outlined),
                                   ),
                                   keyboardType: TextInputType.number,
-                                  validator: (value) =>
+                                   validator: (value) =>
                                       Validators.nonNegativeNumber(value,
                                           fieldName: 'Stock'),
+                                ),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: _minAlertController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Min Alert Level',
+                                    helperText: 'Alert when stock falls below',
+                                    prefixIcon: Icon(Icons.notifications_active_outlined),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  validator: (value) =>
+                                      Validators.nonNegativeNumber(value,
+                                          fieldName: 'Alert Level'),
                                 ),
                               ],
                             ),

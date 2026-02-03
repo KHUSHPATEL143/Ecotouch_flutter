@@ -16,6 +16,12 @@ final tripsListProvider =
   return await TripRepository.getByDate(date);
 });
 
+final tripsLatestProvider = FutureProvider<Trip?>((ref) async {
+  final date = ref.read(selectedDateProvider);
+  ref.watch(tripsListProvider(date));
+  return await TripRepository.getLatest();
+});
+
 class LogisticsScreen extends ConsumerStatefulWidget {
   const LogisticsScreen({super.key});
 
@@ -172,6 +178,7 @@ class _LogisticsScreenState extends ConsumerState<LogisticsScreen> {
   Widget build(BuildContext context) {
     final selectedDate = ref.watch(selectedDateProvider);
     final tripsAsync = ref.watch(tripsListProvider(selectedDate));
+    final latestAsync = ref.watch(tripsLatestProvider);
     final vehiclesAsync = ref.watch(vehiclesProvider);
 
     return Scaffold(
@@ -501,25 +508,149 @@ class _LogisticsScreenState extends ConsumerState<LogisticsScreen> {
                             child: tripsAsync.when(
                               data: (trips) {
                                 if (trips.isEmpty) {
-                                  return Center(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.directions_bus_outlined,
-                                            size: 48,
-                                            color: Theme.of(context)
-                                                .hintColor
-                                                .withOpacity(0.3)),
-                                        const SizedBox(height: 16),
-                                        Text(
-                                          'No trips recorded today',
-                                          style: TextStyle(
-                                              color:
-                                                  Theme.of(context).hintColor),
+                                  return latestAsync.when(
+                                    data: (latest) {
+                                      if (latest == null) {
+                                        return Center(
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.directions_bus_outlined,
+                                                  size: 48,
+                                                  color: Theme.of(context)
+                                                      .hintColor
+                                                      .withOpacity(0.3)),
+                                              const SizedBox(height: 16),
+                                              Text(
+                                                'No trips recorded yet',
+                                                style: TextStyle(
+                                                    color: Theme.of(context)
+                                                        .hintColor),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }
+
+                                      return Center(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(32.0),
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                'No entries for this date',
+                                                style: TextStyle(
+                                                    color: Theme.of(context)
+                                                        .hintColor),
+                                              ),
+                                              const SizedBox(height: 24),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.all(16),
+                                                decoration: BoxDecoration(
+                                                  color: Theme.of(context)
+                                                      .cardColor,
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                  border: Border.all(
+                                                      color: Theme.of(context)
+                                                          .dividerColor),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black
+                                                          .withOpacity(0.05),
+                                                      blurRadius: 10,
+                                                      offset:
+                                                          const Offset(0, 4),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        const Icon(
+                                                            Icons.history,
+                                                            size: 16,
+                                                            color: AppColors
+                                                                .primaryBlue),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Text(
+                                                          'Latest Activity: ${app_date_utils.DateUtils.formatTimeAgo(latest.date)}',
+                                                          style:
+                                                              const TextStyle(
+                                                            color: AppColors
+                                                                .primaryBlue,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 12,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 12),
+                                                    Row(
+                                                      children: [
+                                                        Expanded(
+                                                          child: Column(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .start,
+                                                            children: [
+                                                              Text(
+                                                                latest.vehicleName ??
+                                                                    'Unknown',
+                                                                style: const TextStyle(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold,
+                                                                    fontSize:
+                                                                        16),
+                                                              ),
+                                                              Text(
+                                                                latest.destination,
+                                                                style: TextStyle(
+                                                                    color: Theme
+                                                                            .of(context)
+                                                                        .hintColor,
+                                                                    fontSize:
+                                                                        13),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          '${latest.totalDistance.toStringAsFixed(1)} km',
+                                                          style:
+                                                              const TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 18,
+                                                            color: AppColors
+                                                                .success,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ],
-                                    ),
+                                      );
+                                    },
+                                    loading: () => const Center(
+                                        child: CircularProgressIndicator()),
+                                    error: (_, __) => const SizedBox(),
                                   );
                                 }
 

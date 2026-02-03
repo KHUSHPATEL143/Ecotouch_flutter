@@ -50,6 +50,11 @@ class ThemeNotifier extends StateNotifier<bool> {
     state = !state;
     _prefs.setBool(_themePrefsKey, state);
   }
+
+  void setTheme(bool isDark) {
+    state = isDark;
+    _prefs.setBool(_themePrefsKey, state);
+  }
 }
 
 /// Global provider for theme mode (true = dark, false = light)

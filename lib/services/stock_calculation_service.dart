@@ -374,6 +374,7 @@ class StockCalculationService {
         p.id, 
         p.name, 
         p.unit as product_unit,
+        p.min_alert_level,
         uc.to_unit as inner_unit
       FROM products p
       LEFT JOIN unit_conversions uc ON p.unit = uc.from_unit
@@ -388,6 +389,7 @@ class StockCalculationService {
       final innerUnit = product['inner_unit'] as String?;
       final displayUnit = innerUnit ?? productUnit;
 
+      final minAlertLevel = (product['min_alert_level'] as num?)?.toDouble() ?? 0;
       final currentStock = stockLevels[id] ?? 0;
 
       items.add(StockItem.fromRawMaterial(
@@ -395,11 +397,20 @@ class StockCalculationService {
         name: name,
         currentStock: currentStock,
         unit: displayUnit,
-        minAlertLevel: 0, // Product alert level not yet implemented in DB
+        minAlertLevel: minAlertLevel,
       ));
     }
 
     return items;
+  }
+
+  /// Get consolidated low stock items
+  static Future<List<StockItem>> getLowStockAlerts(DateTime upToDate) async {
+    final rawMaterials = await getRawMaterialStockItems(upToDate);
+    final products = await getProductStockItems(upToDate);
+    
+    final allItems = [...rawMaterials, ...products];
+    return allItems.where((item) => item.status != StockStatus.sufficient).toList();
   }
 
   /// Validate if sufficient stock exists for production

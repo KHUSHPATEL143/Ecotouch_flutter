@@ -31,7 +31,7 @@ class DatabaseService {
       // Open database
       _database = await openDatabase(
         databasePath,
-        version: 18,
+        version: 19,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
         onConfigure: _onConfigure,
@@ -629,6 +629,16 @@ class DatabaseService {
         print('Migration to v18 (Attendance Schema Update) completed successfully');
       } catch (e) {
         print('Error in version 18 migration: $e');
+      }
+    }
+
+    if (oldVersion < 19) {
+      // Version 19: Add min_alert_level to products
+      try {
+        await db.execute(
+            'ALTER TABLE products ADD COLUMN min_alert_level REAL DEFAULT 0');
+      } catch (e) {
+        print('Error adding min_alert_level to products: $e');
       }
     }
   }

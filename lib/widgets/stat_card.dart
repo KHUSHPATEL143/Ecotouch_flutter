@@ -12,6 +12,7 @@ class StatCard extends StatelessWidget {
   final String? trend;
   final bool trendPositive;
   final Gradient? gradient;
+  final VoidCallback? onTap;
 
   const StatCard({
     super.key,
@@ -24,6 +25,7 @@ class StatCard extends StatelessWidget {
     this.trend,
     this.trendPositive = true,
     this.gradient,
+    this.onTap,
   });
 
   @override
@@ -35,7 +37,7 @@ class StatCard extends StatelessWidget {
             ? AppColors.iconBackgroundBlue
             : AppColors.lightIconBackgroundBlue);
 
-    return Card(
+    final cardContent = Card(
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: gradient != null
@@ -143,6 +145,19 @@ class StatCard extends StatelessWidget {
         ),
       ),
     );
+
+    if (onTap != null) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppTheme.borderRadius),
+          child: cardContent,
+        ),
+      );
+    }
+
+    return cardContent;
   }
 }
 

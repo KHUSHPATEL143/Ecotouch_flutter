@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
@@ -32,6 +33,21 @@ final productStockByBagSizeProvider = FutureProvider.family<List<StockByBagSize>
 class InventoryScreen extends ConsumerWidget {
   const InventoryScreen({super.key});
 
+  void _refreshStock(WidgetRef ref, DateTime selectedDate, BuildContext context) {
+    ref.invalidate(rawMaterialStockProvider(selectedDate));
+    ref.invalidate(productStockProvider(selectedDate));
+    ref.invalidate(rawMaterialStockByBagSizeProvider(selectedDate));
+    ref.invalidate(productStockByBagSizeProvider(selectedDate));
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Inventory refreshed'), 
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(milliseconds: 1000),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedDate = ref.watch(selectedDateProvider);
@@ -41,145 +57,140 @@ class InventoryScreen extends ConsumerWidget {
         ? ref.watch(rawMaterialStockProvider(selectedDate))
         : ref.watch(productStockProvider(selectedDate));
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header with Toggle
-            Row(
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyR, control: true): () => _refreshStock(ref, selectedDate, context),
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          body: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Inventory',
-                        style: Theme.of(context).textTheme.displayMedium,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Real-time inventory monitoring',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).textTheme.bodyMedium?.color,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                // Refresh and View Type Toggle - Centered
+                // Header with Toggle
                 Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).brightness == Brightness.dark 
-                            ? AppColors.darkSurfaceVariant 
-                            : AppColors.lightSurfaceVariant,
-                        borderRadius: BorderRadius.circular(AppTheme.borderRadius),
-                        border: Border.all(color: Theme.of(context).dividerColor),
-                      ),
-                      padding: const EdgeInsets.all(4),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildToggleButton(
-                            context,
-                            'Raw Materials',
-                            viewType == StockViewType.rawMaterials,
-                            () => ref.read(stockViewTypeProvider.notifier).state = StockViewType.rawMaterials,
+                          Text(
+                            'Inventory',
+                            style: Theme.of(context).textTheme.displayMedium,
                           ),
-                          const SizedBox(width: 4),
-                          _buildToggleButton(
-                            context,
-                            'Products',
-                            viewType == StockViewType.products,
-                            () => ref.read(stockViewTypeProvider.notifier).state = StockViewType.products,
+                          const SizedBox(height: 4),
+                          Text(
+                            'Real-time inventory monitoring',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).textTheme.bodyMedium?.color,
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    IconButton(
-                      icon: const Icon(Icons.refresh),
-                      tooltip: 'Refresh Inventory',
-                      onPressed: () {
-                         ref.invalidate(rawMaterialStockProvider(selectedDate));
-                         ref.invalidate(productStockProvider(selectedDate));
-                         ref.invalidate(rawMaterialStockByBagSizeProvider(selectedDate));
-                         ref.invalidate(productStockByBagSizeProvider(selectedDate));
-                         
-                         ScaffoldMessenger.of(context).showSnackBar(
-                           const SnackBar(
-                             content: Text('Inventory refreshed'), 
-                             behavior: SnackBarBehavior.floating,
-                             duration: Duration(milliseconds: 1000),
-                           ),
-                         );
-                      },
+                    
+                    // Refresh and View Type Toggle - Centered
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).brightness == Brightness.dark 
+                                ? AppColors.darkSurfaceVariant 
+                                : AppColors.lightSurfaceVariant,
+                            borderRadius: BorderRadius.circular(AppTheme.borderRadius),
+                            border: Border.all(color: Theme.of(context).dividerColor),
+                          ),
+                          padding: const EdgeInsets.all(4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildToggleButton(
+                                context,
+                                'Raw Materials',
+                                viewType == StockViewType.rawMaterials,
+                                () => ref.read(stockViewTypeProvider.notifier).state = StockViewType.rawMaterials,
+                              ),
+                              const SizedBox(width: 4),
+                              _buildToggleButton(
+                                context,
+                                'Products',
+                                viewType == StockViewType.products,
+                                () => ref.read(stockViewTypeProvider.notifier).state = StockViewType.products,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          tooltip: 'Refresh Inventory (Ctrl+R)',
+                          onPressed: () => _refreshStock(ref, selectedDate, context),
+                        ),
+                      ],
                     ),
+                    
+                    // Spacer to balance
+                    const Expanded(child: SizedBox()),
                   ],
                 ),
                 
-                // Spacer to balance
-                const Expanded(child: SizedBox()),
+                const SizedBox(height: 32),
+                
+                // Stock Summary Cards
+                stockAsync.when(
+                  data: (stockItems) {
+                    final sufficient = stockItems.where((s) => s.status == StockStatus.sufficient).length;
+                    final low = stockItems.where((s) => s.status == StockStatus.low).length;
+                    final critical = stockItems.where((s) => s.status == StockStatus.critical).length;
+                    
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: CompactStatCard(
+                            icon: Icons.check_circle_outline,
+                            color: AppColors.success,
+                            label: 'Sufficient Stock',
+                            value: sufficient.toString(),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: CompactStatCard(
+                            icon: Icons.warning_amber_rounded,
+                            color: AppColors.warning,
+                            label: 'Low Stock',
+                            value: low.toString(),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: CompactStatCard(
+                            icon: Icons.error_outline,
+                            color: AppColors.error,
+                            label: 'Critical / Out',
+                            value: critical.toString(),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                  loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator())),
+                  error: (_, __) => const SizedBox(),
+                ),
+                
+                const SizedBox(height: 32),
+                
+                // Stock Table
+                Expanded(
+                  child: _buildStockTable(context, ref, selectedDate, viewType),
+                ),
               ],
             ),
-            
-            const SizedBox(height: 32),
-            
-            // Stock Summary Cards
-            stockAsync.when(
-              data: (stockItems) {
-                final sufficient = stockItems.where((s) => s.status == StockStatus.sufficient).length;
-                final low = stockItems.where((s) => s.status == StockStatus.low).length;
-                final critical = stockItems.where((s) => s.status == StockStatus.critical).length;
-                
-                return Row(
-                  children: [
-                    Expanded(
-                      child: CompactStatCard(
-                        icon: Icons.check_circle_outline,
-                        color: AppColors.success,
-                        label: 'Sufficient Stock',
-                        value: sufficient.toString(),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: CompactStatCard(
-                        icon: Icons.warning_amber_rounded,
-                        color: AppColors.warning,
-                        label: 'Low Stock',
-                        value: low.toString(),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: CompactStatCard(
-                        icon: Icons.error_outline,
-                        color: AppColors.error,
-                        label: 'Critical / Out',
-                        value: critical.toString(),
-                      ),
-                    ),
-                  ],
-                );
-              },
-              loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator())),
-              error: (_, __) => const SizedBox(),
-            ),
-            
-            const SizedBox(height: 32),
-            
-            // Stock Table
-            Expanded(
-              child: _buildStockTable(context, ref, selectedDate, viewType),
-            ),
-          ],
+          ),
         ),
       ),
     );

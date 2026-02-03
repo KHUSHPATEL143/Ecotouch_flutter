@@ -13,6 +13,7 @@ import '../../widgets/status_badge.dart';
 import '../../services/export_service.dart';
 import '../../widgets/export_dialog.dart';
 import 'widgets/attendance_full_screen.dart';
+import '../../utils/dialog_utils.dart';
 
 
 
@@ -790,6 +791,12 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
 
     try {
       final selectedDate = ref.read(selectedDateProvider);
+      
+      final proceed = await DialogUtils.showDateWarning(context, selectedDate);
+      if (!proceed) {
+         setState(() => _isSubmitting = false);
+         return;
+      }
 
       final attendance = Attendance(
         id: _editingId,

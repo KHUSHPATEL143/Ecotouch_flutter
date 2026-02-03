@@ -14,6 +14,7 @@ import '../stock_level/inventory_screen.dart';
 import '../logistics/logistics_screen.dart';
 import '../summary/summary_screen.dart';
 import '../settings/settings_screen.dart';
+import '../auth/database_selection_screen.dart';
 
 class MainLayout extends ConsumerStatefulWidget {
   const MainLayout({super.key});
@@ -210,6 +211,63 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
             ),
           ),
           
+          // Logout Button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  // Logout Logic
+                  ref.read(isAuthenticatedProvider.notifier).state = false;
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(
+                        builder: (_) => const DatabaseSelectionScreen()),
+                    (route) => false,
+                  );
+                },
+                borderRadius: BorderRadius.circular(8),
+                hoverColor: AppColors.error.withOpacity(0.1),
+                child: Container(
+                  height: 48,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: _isSidebarCollapsed ? 0 : 16,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: _isSidebarCollapsed
+                        ? MainAxisAlignment.center
+                        : MainAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.logout,
+                        color: AppColors.error,
+                        size: 22,
+                      ),
+                      if (!_isSidebarCollapsed) ...[
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Logout',
+                            style: TextStyle(
+                              color: AppColors.error,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
           // Collapse Button
           // const Divider(height: 1, color: AppColors.border), // Removed as requested
           InkWell(

@@ -12,6 +12,7 @@ class Product {
   
   final String? unit;
   final double initialStock;
+  final double minAlertLevel;
   
   Product({
     this.id,
@@ -22,6 +23,7 @@ class Product {
     this.rawMaterialRatios,
     this.unit,
     this.initialStock = 0,
+    this.minAlertLevel = 0,
   });
   
   factory Product.fromJson(Map<String, dynamic> json) {
@@ -35,6 +37,7 @@ class Product {
       categoryName: json['category_name'] as String?,
       unit: json['unit'] as String?,
       initialStock: (json['initial_stock'] as num?)?.toDouble() ?? 0,
+      minAlertLevel: (json['min_alert_level'] as num?)?.toDouble() ?? 0,
     );
   }
   
@@ -46,6 +49,7 @@ class Product {
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
       if (unit != null) 'unit': unit,
       'initial_stock': initialStock,
+      'min_alert_level': minAlertLevel,
     };
   }
   
@@ -58,6 +62,7 @@ class Product {
     Map<int, double>? rawMaterialRatios,
     String? unit,
     double? initialStock,
+    double? minAlertLevel,
   }) {
     return Product(
       id: id ?? this.id,
@@ -68,6 +73,7 @@ class Product {
       rawMaterialRatios: rawMaterialRatios ?? this.rawMaterialRatios,
       unit: unit ?? this.unit,
       initialStock: initialStock ?? this.initialStock,
+      minAlertLevel: minAlertLevel ?? this.minAlertLevel,
     );
   }
 }

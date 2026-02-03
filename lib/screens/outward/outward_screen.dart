@@ -14,11 +14,19 @@ import '../../widgets/status_badge.dart';
 import '../../services/export_service.dart';
 import '../../widgets/export_dialog.dart';
 import '../../services/stock_calculation_service.dart';
+import '../../services/stock_calculation_service.dart';
 import '../../models/stock_by_bag_size.dart';
+import '../../utils/dialog_utils.dart';
 
 final outwardListProvider =
     FutureProvider.family<List<Outward>, DateTime>((ref, date) async {
   return await OutwardRepository.getByDate(date);
+});
+
+final outwardLatestProvider = FutureProvider<Outward?>((ref) async {
+  final date = ref.read(selectedDateProvider);
+  ref.watch(outwardListProvider(date));
+  return await OutwardRepository.getLatest();
 });
 
 // Remove local productStockProvider as we use improved inventory_providers
@@ -205,6 +213,7 @@ class _OutwardScreenState extends ConsumerState<OutwardScreen> {
   Widget build(BuildContext context) {
     final selectedDate = ref.watch(selectedDateProvider);
     final outwardAsync = ref.watch(outwardListProvider(selectedDate));
+    final latestAsync = ref.watch(outwardLatestProvider);
     final productsAsync = ref.watch(productsProvider);
 
     return Scaffold(
@@ -558,25 +567,149 @@ class _OutwardScreenState extends ConsumerState<OutwardScreen> {
                             child: outwardAsync.when(
                               data: (outwardList) {
                                 if (outwardList.isEmpty) {
-                                  return Center(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.local_shipping_outlined,
-                                            size: 48,
-                                            color: Theme.of(context)
-                                                .hintColor
-                                                .withOpacity(0.3)),
-                                        const SizedBox(height: 16),
-                                        Text(
-                                          'No shipments recorded today',
-                                          style: TextStyle(
-                                              color:
-                                                  Theme.of(context).hintColor),
+                                  return latestAsync.when(
+                                    data: (latest) {
+                                      if (latest == null) {
+                                        return Center(
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.local_shipping_outlined,
+                                                  size: 48,
+                                                  color: Theme.of(context)
+                                                      .hintColor
+                                                      .withOpacity(0.3)),
+                                              const SizedBox(height: 16),
+                                              Text(
+                                                'No shipments recorded yet',
+                                                style: TextStyle(
+                                                    color: Theme.of(context)
+                                                        .hintColor),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }
+
+                                      return Center(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(32.0),
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                'No entries for this date',
+                                                style: TextStyle(
+                                                    color: Theme.of(context)
+                                                        .hintColor),
+                                              ),
+                                              const SizedBox(height: 24),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.all(16),
+                                                decoration: BoxDecoration(
+                                                  color: Theme.of(context)
+                                                      .cardColor,
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                  border: Border.all(
+                                                      color: Theme.of(context)
+                                                          .dividerColor),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black
+                                                          .withOpacity(0.05),
+                                                      blurRadius: 10,
+                                                      offset:
+                                                          const Offset(0, 4),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        const Icon(
+                                                            Icons.history,
+                                                            size: 16,
+                                                            color: AppColors
+                                                                .primaryBlue),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Text(
+                                                          'Latest Activity: ${app_date_utils.DateUtils.formatTimeAgo(latest.date)}',
+                                                          style:
+                                                              const TextStyle(
+                                                            color: AppColors
+                                                                .primaryBlue,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 12,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 12),
+                                                    Row(
+                                                      children: [
+                                                        Expanded(
+                                                          child: Column(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .start,
+                                                            children: [
+                                                              Text(
+                                                                latest.productName ??
+                                                                    'Unknown',
+                                                                style: const TextStyle(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold,
+                                                                    fontSize:
+                                                                        16),
+                                                              ),
+                                                              Text(
+                                                                '${latest.bagSize} kg × ${latest.bagCount} bags',
+                                                                style: TextStyle(
+                                                                    color: Theme
+                                                                            .of(context)
+                                                                        .hintColor,
+                                                                    fontSize:
+                                                                        13),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          '${latest.totalWeight.toStringAsFixed(2)} kg',
+                                                          style:
+                                                              const TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 18,
+                                                            color: AppColors
+                                                                .success,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ],
-                                    ),
+                                      );
+                                    },
+                                    loading: () => const Center(
+                                        child: CircularProgressIndicator()),
+                                    error: (_, __) => const SizedBox(),
                                   );
                                 }
 
@@ -718,6 +851,10 @@ class _OutwardScreenState extends ConsumerState<OutwardScreen> {
 
     try {
       final selectedDate = ref.read(selectedDateProvider);
+      
+      final proceed = await DialogUtils.showDateWarning(context, selectedDate);
+      if (!proceed) return;
+
       final bagSize = _selectedBagSize!;
       final bagCount = int.parse(_bagCountController.text);
       final total = bagSize * bagCount;

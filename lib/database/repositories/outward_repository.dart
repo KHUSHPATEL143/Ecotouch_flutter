@@ -57,6 +57,19 @@ class OutwardRepository {
     );
   }
   
+  /// Get latest outward entry
+  static Future<Outward?> getLatest() async {
+    final results = await DatabaseService.rawQuery('''
+      SELECT o.*, p.name as product_name
+      FROM outward o
+      INNER JOIN products p ON o.product_id = p.id
+      ORDER BY o.date DESC, o.id DESC
+      LIMIT 1
+    ''');
+    if (results.isEmpty) return null;
+    return Outward.fromJson(results.first);
+  }
+
   /// Delete outward entry
   static Future<int> delete(int id) async {
     return await DatabaseService.delete(

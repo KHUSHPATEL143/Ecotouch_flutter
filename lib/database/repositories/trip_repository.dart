@@ -72,6 +72,19 @@ class TripRepository {
     );
   }
   
+  /// Get latest trip
+  static Future<Trip?> getLatest() async {
+    final results = await DatabaseService.rawQuery('''
+      SELECT t.*, v.name as vehicle_name, v.registration_number
+      FROM trips t
+      LEFT JOIN vehicles v ON t.vehicle_id = v.id
+      ORDER BY t.date DESC, t.id DESC
+      LIMIT 1
+    ''');
+    if (results.isEmpty) return null;
+    return Trip.fromJson(results.first);
+  }
+
   /// Delete trip
   static Future<int> delete(int id) async {
     return await DatabaseService.delete(

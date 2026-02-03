@@ -149,6 +149,29 @@ class ProductionRepository {
     });
   }
 
+  /// Get latest production entry
+  static Future<Production?> getLatest() async {
+    final results = await DatabaseService.rawQuery('''
+      SELECT 
+        p.*, 
+        pr.name as product_name, 
+        pr.unit as product_unit,
+        uc.to_unit as inner_unit
+      FROM production p
+      LEFT JOIN products pr ON p.product_id = pr.id
+      LEFT JOIN unit_conversions uc ON pr.unit = uc.from_unit
+      ORDER BY p.date DESC, p.id DESC
+      LIMIT 1
+    ''');
+    
+    if (results.isEmpty) return null;
+    
+    var production = Production.fromJson(results.first);
+    final workerIds = await getWorkerIds(production.id!);
+    production = production.copyWith(workerIds: workerIds);
+    return production;
+  }
+
   /// Delete production entry
   static Future<int> delete(int id) async {
     // Delete related records first

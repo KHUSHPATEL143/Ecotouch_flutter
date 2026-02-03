@@ -14,10 +14,18 @@ import '../../services/export_service.dart';
 import '../../widgets/status_badge.dart';
 import '../../services/export_service.dart';
 import '../../widgets/export_dialog.dart';
+import '../../utils/dialog_utils.dart';
 
 final inwardListProvider =
     FutureProvider.family<List<Inward>, DateTime>((ref, date) async {
   return await InwardRepository.getByDate(date);
+});
+
+final inwardLatestProvider = FutureProvider<Inward?>((ref) async {
+  // Watch list provider so we update when recent data changes locally
+  final date = ref.read(selectedDateProvider);
+  ref.watch(inwardListProvider(date));
+  return await InwardRepository.getLatest();
 });
 
 class InwardScreen extends ConsumerStatefulWidget {
@@ -133,6 +141,7 @@ class _InwardScreenState extends ConsumerState<InwardScreen> {
   Widget build(BuildContext context) {
     final selectedDate = ref.watch(selectedDateProvider);
     final inwardAsync = ref.watch(inwardListProvider(selectedDate));
+    final latestAsync = ref.watch(inwardLatestProvider);
     final materialsAsync = ref.watch(rawMaterialsProvider);
 
     return Scaffold(
@@ -450,25 +459,149 @@ class _InwardScreenState extends ConsumerState<InwardScreen> {
                             child: inwardAsync.when(
                               data: (inwardList) {
                                 if (inwardList.isEmpty) {
-                                  return Center(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.arrow_downward,
-                                            size: 48,
-                                            color: Theme.of(context)
-                                                .hintColor
-                                                .withOpacity(0.3)),
-                                        const SizedBox(height: 16),
-                                        Text(
-                                          'No inward entries today',
-                                          style: TextStyle(
-                                              color:
-                                                  Theme.of(context).hintColor),
+                                  return latestAsync.when(
+                                    data: (latest) {
+                                      if (latest == null) {
+                                        return Center(
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.arrow_downward,
+                                                  size: 48,
+                                                  color: Theme.of(context)
+                                                      .hintColor
+                                                      .withOpacity(0.3)),
+                                              const SizedBox(height: 16),
+                                              Text(
+                                                'No inward entries yet',
+                                                style: TextStyle(
+                                                    color: Theme.of(context)
+                                                        .hintColor),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }
+
+                                      return Center(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(32.0),
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                'No entries for this date',
+                                                style: TextStyle(
+                                                    color: Theme.of(context)
+                                                        .hintColor),
+                                              ),
+                                              const SizedBox(height: 24),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.all(16),
+                                                decoration: BoxDecoration(
+                                                  color: Theme.of(context)
+                                                      .cardColor,
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                  border: Border.all(
+                                                      color: Theme.of(context)
+                                                          .dividerColor),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black
+                                                          .withOpacity(0.05),
+                                                      blurRadius: 10,
+                                                      offset:
+                                                          const Offset(0, 4),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        const Icon(
+                                                            Icons.history,
+                                                            size: 16,
+                                                            color: AppColors
+                                                                .primaryBlue),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Text(
+                                                          'Latest Activity: ${app_date_utils.DateUtils.formatTimeAgo(latest.date)}',
+                                                          style:
+                                                              const TextStyle(
+                                                            color: AppColors
+                                                                .primaryBlue,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 12,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 12),
+                                                    Row(
+                                                      children: [
+                                                        Expanded(
+                                                          child: Column(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .start,
+                                                            children: [
+                                                              Text(
+                                                                latest.materialName ??
+                                                                    'Unknown',
+                                                                style: const TextStyle(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold,
+                                                                    fontSize:
+                                                                        16),
+                                                              ),
+                                                              Text(
+                                                                '${latest.bagSize} ${latest.materialUnit} × ${latest.bagCount}',
+                                                                style: TextStyle(
+                                                                    color: Theme
+                                                                            .of(context)
+                                                                        .hintColor,
+                                                                    fontSize:
+                                                                        13),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          '${latest.totalWeight.toStringAsFixed(2)} ${latest.materialUnit}',
+                                                          style:
+                                                              const TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 18,
+                                                            color: AppColors
+                                                                .success,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ],
-                                    ),
+                                      );
+                                    },
+                                    loading: () => const Center(
+                                        child: CircularProgressIndicator()),
+                                    error: (_, __) => const SizedBox(),
                                   );
                                 }
 
@@ -589,6 +722,9 @@ class _InwardScreenState extends ConsumerState<InwardScreen> {
 
     try {
       final selectedDate = ref.read(selectedDateProvider);
+      
+      final proceed = await DialogUtils.showDateWarning(context, selectedDate);
+      if (!proceed) return;
 
       final inward = Inward(
         id: _editingId,

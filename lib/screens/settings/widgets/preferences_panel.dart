@@ -184,7 +184,7 @@ class _PreferencesPanelState extends ConsumerState<PreferencesPanel> {
                                   subtitle: const Text('Enable dark color theme'),
                                   value: isDarkMode,
                                   onChanged: (bool value) {
-                                    ref.read(themeModeProvider.notifier).state = value;
+                                    ref.read(themeModeProvider.notifier).setTheme(value);
                                   },
                                   secondary: Icon(
                                     isDarkMode ? Icons.dark_mode : Icons.light_mode,

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../theme/app_colors.dart';
-import '../../../../database/database_service.dart';
-import '../../../../utils/date_utils.dart' as app_date_utils;
-import '../../../../providers/summary_providers.dart';
-import '../../../../widgets/export_dialog.dart';
-import '../../../../services/export_service.dart';
+import '../../../theme/app_colors.dart';
+import '../../../database/database_service.dart';
+import '../../../utils/date_utils.dart' as app_date_utils;
+import '../../../providers/summary_providers.dart';
+import '../../../widgets/export_dialog.dart';
+import '../../../services/export_service.dart';
 
 // Provider for attendance data
 final attendanceReportProvider =
@@ -69,11 +69,61 @@ final recentAttendanceProvider = FutureProvider<Map<int, double>>((ref) async {
 });
 
 
-class AttendanceReportTab extends ConsumerWidget {
+class AttendanceReportTab extends ConsumerStatefulWidget {
   const AttendanceReportTab({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AttendanceReportTab> createState() => _AttendanceReportTabState();
+}
+
+class _AttendanceReportTabState extends ConsumerState<AttendanceReportTab> {
+  // Vertical Controllers for the 3 columns
+  final ScrollController _verticalNameController = ScrollController();
+  final ScrollController _verticalDataController = ScrollController();
+  final ScrollController _verticalStatsController = ScrollController();
+
+  bool _isSyncing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Sync all vertical controllers
+    _verticalNameController.addListener(() => _syncScroll(_verticalNameController));
+    _verticalDataController.addListener(() => _syncScroll(_verticalDataController));
+    _verticalStatsController.addListener(() => _syncScroll(_verticalStatsController));
+  }
+
+  @override
+  void dispose() {
+    _verticalNameController.dispose();
+    _verticalDataController.dispose();
+    _verticalStatsController.dispose();
+    super.dispose();
+  }
+
+  void _syncScroll(ScrollController source) {
+    if (_isSyncing) return;
+    _isSyncing = true;
+
+    try {
+      if (source != _verticalNameController && _verticalNameController.hasClients) {
+        _verticalNameController.jumpTo(source.offset);
+      }
+      if (source != _verticalDataController && _verticalDataController.hasClients) {
+        _verticalDataController.jumpTo(source.offset);
+      }
+      if (source != _verticalStatsController && _verticalStatsController.hasClients) {
+        _verticalStatsController.jumpTo(source.offset);
+      }
+    } catch (e) {
+      // Ignore scroll errors during dispose/init
+    } finally {
+      _isSyncing = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final dateRange = ref.watch(reportDateRangeProvider);
     final viewMode = ref.watch(reportViewModeProvider);
     final attendanceAsync = ref.watch(attendanceReportProvider(dateRange));
@@ -216,8 +266,6 @@ class AttendanceReportTab extends ConsumerWidget {
   }
 
   Future<void> _handleExport(BuildContext context) async {
-      // ... (Export logic can remain same for now, or updating to include new columns would be ideal but user didn't explicitly ask for export update)
-      // Leaving as is to focus on UI request first
     final config = await showDialog<ExportConfig>(
       context: context,
       builder: (c) => const ExportDialog(title: 'Export Attendance Matrix'),
@@ -225,8 +273,6 @@ class AttendanceReportTab extends ConsumerWidget {
 
     if (config == null) return;
     
-    // ... (rest of export logic same as before)
-    // Re-implementing simplified to avoid context loss
      DateTime start;
     DateTime end;
 
@@ -268,7 +314,6 @@ class AttendanceReportTab extends ConsumerWidget {
         return;
       }
       
-      // ... (Standard Export implementation)
        final Set<String> workerNames = {};
       final Set<String> dates = {};
       final Map<String, Map<String, String>> matrix = {};
@@ -361,10 +406,10 @@ class AttendanceReportTab extends ConsumerWidget {
       DateTimeRange range,
       Map<int, double> recentStats) {
     
-    // Process data
+    // Process Data
     final Map<int, Map<String, String>> workerAttendance = {};
     final Map<int, String> workerNames = {};
-    final Map<int, double> workerTotalPresentInView = {}; // Using double to account for half days
+    final Map<int, double> workerTotalPresentInView = {}; 
 
     for (var row in rawData) {
       final workerId = row['worker_id'] as int;
@@ -383,7 +428,7 @@ class AttendanceReportTab extends ConsumerWidget {
       if (status == 'full_day') {
         workerTotalPresentInView[workerId] = (workerTotalPresentInView[workerId] ?? 0) + 1.0;
       } else if (status == 'half_day') {
-        workerTotalPresentInView[workerId] = (workerTotalPresentInView[workerId] ?? 0) + 1.0;
+        workerTotalPresentInView[workerId] = (workerTotalPresentInView[workerId] ?? 0) + 0.5;
       }
     }
 
@@ -399,211 +444,72 @@ class AttendanceReportTab extends ConsumerWidget {
        totalPresenceInView += p;
     }
     
-    // Avg Attendance = (Total Present / (Workers * Days)) * 100
-    // Avoid division by zero
     final double avgAttendance = (totalActiveWorkers > 0 && daysCount > 0)
         ? (totalPresenceInView / (totalActiveWorkers * daysCount)) * 100
         : 0.0;
 
+    // Dimensions
+    const double nameColWidth = 180.0; // Slightly reduced for better fit on small screens
+    const double dayColWidth = 50.0; // Compact
+    const double statsColWidth = 180.0; // Compact
+    const double rowHeight = 50.0;
+    const double headerHeight = 50.0;
+    
+    // Sort workers by name
+    final sortedWorkerIds = workerNames.keys.toList()..sort((a,b) => (workerNames[a] ?? '').compareTo(workerNames[b] ?? ''));
 
     return Column(
       children: [
+        // Main Body: 3 Columns (Left Fixed, Middle Scrollable, Right Fixed)
         Expanded(
-          child: Scrollbar(
-            thumbVisibility: true,
-            trackVisibility: true,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                // Width = Name(200) + Days(60*N) + Total(60) + Percent(60) + 30Days(80)
-                width: 200.0 + (days.length * 60.0) + 60.0 + 60.0 + 80.0,
+          child: Row(
+            children: [
+              // 1. LEFT COLUMN (Names) - Fixed Width
+              SizedBox(
+                width: nameColWidth,
                 child: Column(
                   children: [
                     // Header
                     Container(
-                      height: 50,
+                      height: headerHeight,
                       decoration: BoxDecoration(
                         border: Border(
-                            bottom: BorderSide(
-                                color: Theme.of(context)
-                                    .dividerColor
-                                    .withOpacity(0.1))),
+                            bottom: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.1))),
                       ),
-                      child: Row(
-                        children: [
-                          const SizedBox(
-                              width: 200,
-                              child: Padding(
-                                padding: EdgeInsets.only(left: 24),
-                                child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text('WORKER NAME',
-                                        style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold))),
-                              )),
-                          ...days.map((date) => SizedBox(
-                                width: 60,
-                                child: Center(
-                                  child: Text(
-                                    '${date.day}/${date.month.toString().padLeft(2, '0')}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium
-                                          ?.color
-                                          ?.withOpacity(0.7),
-                                    ),
-                                  ),
-                                ),
-                              )),
-                           const SizedBox(
-                              width: 60,
-                              child: Center(
-                                  child: Text('TOTAL',
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold)))),
-                           const SizedBox(
-                              width: 60,
-                              child: Center(
-                                  child: Text('%',
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold)))),
-                           const SizedBox(
-                              width: 80,
-                              child: Center(
-                                  child: Text('30 DAYS',
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold)))),
-                        ],
-                      ),
+                      padding: const EdgeInsets.only(left: 24),
+                      alignment: Alignment.centerLeft,
+                      child: const Text('WORKER NAME', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                     ),
-                    
-                    // Body
+                    // Body List
                     Expanded(
                       child: ListView.builder(
-                        itemCount: workerNames.length,
+                        controller: _verticalNameController,
+                        physics: const ClampingScrollPhysics(), // Important for sync
+                        itemCount: sortedWorkerIds.length,
                         itemBuilder: (context, index) {
-                          final workerId = workerNames.keys.elementAt(index);
+                          final workerId = sortedWorkerIds[index];
                           final name = workerNames[workerId]!;
-                          final attendance = workerAttendance[workerId] ?? {};
-                          final totalInView = workerTotalPresentInView[workerId] ?? 0;
-                          
-                          // Calculate % for view
-                          final viewPercent = (daysCount > 0) 
-                              ? (totalInView / daysCount) * 100 
-                              : 0.0;
-
-                          // Recent 30 days
-                          final recentTotal = recentStats[workerId] ?? 0;
-
                           return Container(
-                            height: 50,
+                            height: rowHeight,
+                            padding: const EdgeInsets.only(left: 24),
                             decoration: BoxDecoration(
                               border: Border(
-                                  bottom: BorderSide(
-                                      color: Theme.of(context)
-                                          .dividerColor
-                                          .withOpacity(0.05))),
+                                  bottom: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.05))),
                             ),
                             child: Row(
                               children: [
-                                SizedBox(
-                                  width: 200,
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(left: 24),
-                                    child: Row(
-                                      children: [
-                                        CircleAvatar(
-                                          radius: 14,
-                                          backgroundColor: Theme.of(context)
-                                              .dividerColor
-                                              .withOpacity(0.1),
-                                          child: Text(
-                                            name.substring(0, 2).toUpperCase(),
-                                            style: TextStyle(
-                                                fontSize: 10,
-                                                color: Theme.of(context)
-                                                    .textTheme
-                                                    .bodyMedium
-                                                    ?.color),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Text(name,
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.w500)),
-                                      ],
-                                    ),
+                                CircleAvatar(
+                                  radius: 14,
+                                  backgroundColor: Theme.of(context).dividerColor.withOpacity(0.1),
+                                  child: Text(
+                                    name.substring(0, 2).toUpperCase(),
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: Theme.of(context).textTheme.bodyMedium?.color),
                                   ),
                                 ),
-                                ...days.map((date) {
-                                  final dateStr = app_date_utils.DateUtils
-                                      .formatDateForDatabase(date);
-                                  final status = attendance[dateStr];
-                                  return SizedBox(
-                                    width: 60,
-                                    child: Center(
-                                        child:
-                                            _buildStatusBadge(context, status)),
-                                  );
-                                }),
-                                
-                                // Total Column
-                                SizedBox(
-                                  width: 60,
-                                  child: Center(
-                                    child: Text(
-                                      totalInView % 1 == 0 ? totalInView.toInt().toString() : totalInView.toString(), // Show decimal if half day
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13),
-                                    ),
-                                  ),
-                                ),
-
-                                // % Column
-                                SizedBox(
-                                  width: 60,
-                                  child: Center(
-                                    child: Text(
-                                      '${viewPercent.toStringAsFixed(0)}%',
-                                      style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                          color: viewPercent < 50 ? AppColors.error : AppColors.success
-                                      ),
-                                    ),
-                                  ),
-                                ),
-
-                                // 30 Days Column
-                                SizedBox(
-                                  width: 80,
-                                  child: Center(
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: Theme.of(context)
-                                            .dividerColor
-                                            .withOpacity(0.05),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        '${recentTotal % 1 == 0 ? recentTotal.toInt() : recentTotal}/30',
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12),
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                                const SizedBox(width: 12),
+                                Expanded(child: Text(name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500))),
                               ],
                             ),
                           );
@@ -613,17 +519,169 @@ class AttendanceReportTab extends ConsumerWidget {
                   ],
                 ),
               ),
-            ),
+
+              // 2. MIDDLE COLUMN (Data) - Scrollable Horizontal
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: days.length * dayColWidth,
+                    child: Column(
+                      children: [
+                        // Header (With Days)
+                        SizedBox(
+                          height: headerHeight,
+                          child: Container(
+                             decoration: BoxDecoration(
+                                border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.1))),
+                              ),
+                            child: Row(
+                              children: days.map((date) => SizedBox(
+                                width: dayColWidth,
+                                child: Center(
+                                  child: Text(
+                                    '${date.day}/${date.month.toString().padLeft(2, '0')}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
+                                    ),
+                                  ),
+                                ),
+                              )).toList(),
+                            ),
+                          ),
+                        ),
+                        // Body List (Rows of Day Data)
+                        Expanded(
+                          child: ListView.builder(
+                            controller: _verticalDataController,
+                            physics: const ClampingScrollPhysics(), // Important for sync
+                            itemCount: sortedWorkerIds.length,
+                            itemBuilder: (context, index) {
+                              final workerId = sortedWorkerIds[index];
+                              final attendance = workerAttendance[workerId] ?? {};
+                              return Container(
+                                height: rowHeight,
+                                decoration: BoxDecoration(
+                                  border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.05))),
+                                ),
+                                child: Row(
+                                  children: days.map((date) {
+                                    final dateStr = app_date_utils.DateUtils.formatDateForDatabase(date);
+                                    final status = attendance[dateStr];
+                                    return SizedBox(
+                                      width: dayColWidth,
+                                      child: Center(child: _buildStatusBadge(context, status)),
+                                    );
+                                  }).toList(),
+                                ),
+                              );
+                            },
+                          ),
+                        )
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // 3. RIGHT COLUMN (Stats) - Fixed Width
+              SizedBox(
+                width: statsColWidth,
+                child: Column(
+                  children: [
+                    // Header
+                    Container(
+                      height: headerHeight,
+                      decoration: BoxDecoration(
+                        border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.1))),
+                      ),
+                      child: Row(
+                        children: const [
+                          SizedBox(width: 60, child: Center(child: Text('TOTAL', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))),
+                          SizedBox(width: 60, child: Center(child: Text('%', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))),
+                          SizedBox(width: 60, child: Center(child: Text('30 DAYS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))),
+                        ],
+                      ),
+                    ),
+                    // Body List
+                    Expanded(
+                      child: ListView.builder(
+                        controller: _verticalStatsController,
+                        physics: const ClampingScrollPhysics(), // Important for sync
+                        itemCount: sortedWorkerIds.length,
+                        itemBuilder: (context, index) {
+                          final workerId = sortedWorkerIds[index];
+                          final totalInView = workerTotalPresentInView[workerId] ?? 0;
+                          final viewPercent = (daysCount > 0) ? (totalInView / daysCount) * 100 : 0.0;
+                          final recentTotal = recentStats[workerId] ?? 0;
+                          
+                          return Container(
+                             height: rowHeight,
+                             decoration: BoxDecoration(
+                               border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.05))),
+                             ),
+                             child: Row(
+                               children: [
+                                 // Total
+                                 SizedBox(
+                                   width: 60,
+                                   child: Center(
+                                     child: Text(
+                                       totalInView % 1 == 0 ? totalInView.toInt().toString() : totalInView.toString(),
+                                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                     ),
+                                   ),
+                                 ),
+                                 // %
+                                 SizedBox(
+                                   width: 60,
+                                   child: Center(
+                                     child: Text(
+                                       '${viewPercent.toStringAsFixed(0)}%',
+                                       style: TextStyle(
+                                           fontSize: 13,
+                                           fontWeight: FontWeight.w500,
+                                           color: viewPercent < 50 ? AppColors.error : AppColors.success),
+                                     ),
+                                   ),
+                                 ),
+                                 // 30 Days
+                                 SizedBox(
+                                   width: 60,
+                                   child: Center(
+                                     child: Container(
+                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                       decoration: BoxDecoration(
+                                         color: Theme.of(context).dividerColor.withOpacity(0.05),
+                                         borderRadius: BorderRadius.circular(12),
+                                       ),
+                                       child: Text(
+                                         '${recentTotal % 1 == 0 ? recentTotal.toInt() : recentTotal}/30',
+                                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                       ),
+                                     ),
+                                   ),
+                                 ),
+                               ],
+                             ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
 
-        // Footer (Active Workers count) - Calculated dynamically
+        // Footer (Active Workers count)
         Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            border: Border(
-                top: BorderSide(
-                    color: Theme.of(context).dividerColor.withOpacity(0.1))),
+             border: Border(top: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.1))),
           ),
           child: Row(
             children: [
@@ -634,36 +692,26 @@ class AttendanceReportTab extends ConsumerWidget {
                       style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
-                          color: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.color
-                              ?.withOpacity(0.7))),
+                          color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7))),
                   const SizedBox(height: 4),
-                  Text('$totalActiveWorkers',
-                      style: const TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text('$totalActiveWorkers', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 ],
               ),
               const SizedBox(width: 48),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('AVG ATTENDANCE',
-                      style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.color
-                              ?.withOpacity(0.7))),
-                  const SizedBox(height: 4),
-                  Text('${avgAttendance.toStringAsFixed(1)}%',
-                      style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: avgAttendance > 75 ? AppColors.success : (avgAttendance > 40 ? AppColors.warning : AppColors.error))),
+                   Text('AVG ATTENDANCE',
+                       style: TextStyle(
+                           fontSize: 10,
+                           fontWeight: FontWeight.bold,
+                           color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7))),
+                   const SizedBox(height: 4),
+                   Text('${avgAttendance.toStringAsFixed(1)}%',
+                       style: TextStyle(
+                           fontSize: 20,
+                           fontWeight: FontWeight.bold,
+                           color: avgAttendance > 75 ? AppColors.success : (avgAttendance > 40 ? AppColors.warning : AppColors.error))),
                 ],
               ),
             ],
@@ -726,4 +774,3 @@ class AttendanceReportTab extends ConsumerWidget {
     );
   }
 }
-

@@ -57,6 +57,19 @@ class InwardRepository {
     );
   }
   
+  /// Get latest inward entry
+  static Future<Inward?> getLatest() async {
+    final results = await DatabaseService.rawQuery('''
+      SELECT i.*, r.name as material_name, r.unit as material_unit
+      FROM inward i
+      INNER JOIN raw_materials r ON i.raw_material_id = r.id
+      ORDER BY i.date DESC, i.id DESC
+      LIMIT 1
+    ''');
+    if (results.isEmpty) return null;
+    return Inward.fromJson(results.first);
+  }
+
   /// Delete inward entry
   static Future<int> delete(int id) async {
     return await DatabaseService.delete(

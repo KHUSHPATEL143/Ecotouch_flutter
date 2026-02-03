@@ -19,10 +19,18 @@ import '../../database/database_service.dart';
 import '../../widgets/export_dialog.dart';
 import '../../widgets/status_badge.dart';
 import '../../models/stock_by_bag_size.dart';
+import '../../utils/dialog_utils.dart';
 
 final productionListProvider =
     FutureProvider.family<List<Production>, DateTime>((ref, date) async {
   return await ProductionRepository.getByDate(date);
+});
+
+final productionLatestProvider = FutureProvider<Production?>((ref) async {
+  // Watch list provider so we update when recent data changes locally
+  final date = ref.read(selectedDateProvider);
+  ref.watch(productionListProvider(date));
+  return await ProductionRepository.getLatest();
 });
 
 class ProductionScreen extends ConsumerStatefulWidget {
@@ -223,6 +231,7 @@ class _ProductionScreenState extends ConsumerState<ProductionScreen> {
   Widget build(BuildContext context) {
     final selectedDate = ref.watch(selectedDateProvider);
     final productionAsync = ref.watch(productionListProvider(selectedDate));
+    final latestAsync = ref.watch(productionLatestProvider);
     final productsAsync = ref.watch(productsProvider);
     final workersAsync = ref.watch(workersProvider);
 
@@ -919,25 +928,149 @@ class _ProductionScreenState extends ConsumerState<ProductionScreen> {
                             child: productionAsync.when(
                               data: (productionList) {
                                 if (productionList.isEmpty) {
-                                  return Center(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.assignment_outlined,
-                                            size: 48,
-                                            color: Theme.of(context)
-                                                .hintColor
-                                                .withOpacity(0.3)),
-                                        const SizedBox(height: 16),
-                                        Text(
-                                          'No production recorded today',
-                                          style: TextStyle(
-                                              color:
-                                                  Theme.of(context).hintColor),
+                                  return latestAsync.when(
+                                    data: (latest) {
+                                      if (latest == null) {
+                                        return Center(
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.assignment_outlined,
+                                                  size: 48,
+                                                  color: Theme.of(context)
+                                                      .hintColor
+                                                      .withOpacity(0.3)),
+                                              const SizedBox(height: 16),
+                                              Text(
+                                                'No production recorded yet',
+                                                style: TextStyle(
+                                                    color: Theme.of(context)
+                                                        .hintColor),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }
+
+                                      return Center(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(32.0),
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                'No entries for this date',
+                                                style: TextStyle(
+                                                    color: Theme.of(context)
+                                                        .hintColor),
+                                              ),
+                                              const SizedBox(height: 24),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.all(16),
+                                                decoration: BoxDecoration(
+                                                  color: Theme.of(context)
+                                                      .cardColor,
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                  border: Border.all(
+                                                      color: Theme.of(context)
+                                                          .dividerColor),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black
+                                                          .withOpacity(0.05),
+                                                      blurRadius: 10,
+                                                      offset:
+                                                          const Offset(0, 4),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        const Icon(
+                                                            Icons.history,
+                                                            size: 16,
+                                                            color: AppColors
+                                                                .primaryBlue),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Text(
+                                                          'Latest Activity: ${app_date_utils.DateUtils.formatTimeAgo(latest.date)}',
+                                                          style:
+                                                              const TextStyle(
+                                                            color: AppColors
+                                                                .primaryBlue,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 12,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 12),
+                                                    Row(
+                                                      children: [
+                                                        Expanded(
+                                                          child: Column(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .start,
+                                                            children: [
+                                                              Text(
+                                                                latest.productName ??
+                                                                    'Unknown',
+                                                                style: const TextStyle(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold,
+                                                                    fontSize:
+                                                                        16),
+                                                              ),
+                                                              Text(
+                                                                '${latest.batches} Batches',
+                                                                style: TextStyle(
+                                                                    color: Theme
+                                                                            .of(context)
+                                                                        .hintColor,
+                                                                    fontSize:
+                                                                        13),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          '${latest.totalQuantity.toStringAsFixed(2)} ${latest.innerUnit ?? latest.productUnit ?? 'Units'}',
+                                                          style:
+                                                              const TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 18,
+                                                            color: AppColors
+                                                                .success,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ],
-                                    ),
+                                      );
+                                    },
+                                    loading: () => const Center(
+                                        child: CircularProgressIndicator()),
+                                    error: (_, __) => const SizedBox(),
                                   );
                                 }
 
@@ -1134,6 +1267,10 @@ class _ProductionScreenState extends ConsumerState<ProductionScreen> {
 
     try {
       final selectedDate = ref.read(selectedDateProvider);
+      
+      final proceed = await DialogUtils.showDateWarning(context, selectedDate);
+      if (!proceed) return;
+
       final batches = int.parse(_batchesController.text);
       final totalQuantity = double.parse(_totalQuantityController.text);
 
